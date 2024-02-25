@@ -43,12 +43,12 @@ net_listen(FDType fd)
 }
 
 extern FDType
-net_accept(FDType fd)
+net_accept(FDType fd, void *addr, void *addrlen)
 {
   FDType nfd;
 
 
-  nfd=accept(fd, NULL, NULL);
+  nfd=accept(fd, addr, addrlen);
 
 #ifdef __APPLE__
   // might need this on OSX to avoid sigpipe on read and write
@@ -61,7 +61,7 @@ net_accept(FDType fd)
   }
 #endif
 
-  return nfd;
+ return nfd;
 }
 
 extern int

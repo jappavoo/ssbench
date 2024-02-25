@@ -30,7 +30,7 @@ typedef int PortType;
 extern int     net_setup_listen_socket(FDType *fd, PortType *port);
 extern int     net_setup_connection(FDType *fd, char *host, PortType port);
 extern int     net_listen(FDType fd);
-extern int     net_accept(FDType fd);
+extern int     net_accept(FDType fd, void *addr, void *addrlen);
 
 extern ssize_t net_writen(FDType fd, const void *vptr, size_t n);
 extern ssize_t net_readn(FDType fd, void *vptr, size_t n);

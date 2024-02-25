@@ -7,12 +7,12 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <pthread.h>
-
 #include <sys/types.h>
 
 #include "net.h"
+#include "msg.h"
 #include "sockserver.h"
-#include "msgserver.h"
+#include "opserver.h"
 
 struct Args {
   int portCnt;
@@ -27,9 +27,12 @@ struct Args {
 
 extern struct Args Args;
   
-#define VLPRINT(VL, fmt, ...)  { if (verbose(VL)) { fprintf(stderr, "%s: " fmt, __func__, __VA_ARGS__); } }
+#define VLPRINT(VL, fmt, ...)  {		\
+    if (verbose(VL)) {							\
+	  fprintf(stderr, "%s: " fmt, __func__, __VA_ARGS__);		\
+    } }
 #define VPRINT(fmt, ...) VLPRINT(1, fmt, __VA_ARGS__)
 
-inline bool verbose(int l) { return Args.verbose >= l; }
+static inline bool verbose(int l) { return Args.verbose >= l; }
 
 #endif

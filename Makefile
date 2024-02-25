@@ -1,18 +1,20 @@
-SRCS := main.c sockserver.c msgserver.c net.c
+SRCS := main.c sockserver.c opserver.c net.c
 OBJS := $(SRCS:%.c=%.o)
-CFLAGS := -g -O3 -std=gnu99 -MD -MP
+O:=0
+CFLAGS := -g -O${O} -std=gnu99 -MD -MP
 TARGETS := ssbench
 TSCLOGREPO := git@github.com:jappavoo/tsclog.git
 
 .PHONY: clean 
 
-ext/tsclog/tsclogc.h:
-	mkdir -p ext/tsclog && git clone ${TSCLOGREPO} ext/tsclog
-
 all: ${TARGETS}
 
 ssbench: ${OBJS}
 	${CC} ${CFLAGS} -o $@ $^ -lpthread
+
+
+ext/tsclog/tsclogc.h:
+	mkdir -p ext/tsclog && git clone ${TSCLOGREPO} ext/tsclog
 
 clean:
 	-rm -rf $(wildcard *.o *.d ${TARGETS} ext)
