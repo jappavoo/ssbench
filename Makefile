@@ -10,7 +10,7 @@ ssbench: ${OBJS}
 	${CC} ${CFLAGS} -o $@ $^ -lpthread
 
 clean:
-	-rm -rf $(wildcard *.o *.d)
+	-rm -rf $(wildcard *.o *.d ${TARGETS})
 
 
 -include $(wildcard *.d)
