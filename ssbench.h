@@ -5,9 +5,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <pthread.h>
 
+#include "net.h"
 #include "sockserver.h"
-#include "worker.h"
+#include "msgserver.h"
 
 struct Args {
   int portCnt;

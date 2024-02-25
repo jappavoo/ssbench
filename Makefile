@@ -1,4 +1,4 @@
-SRCS := main.c sockserver.c worker.c net.c
+SRCS := main.c sockserver.c msgserver.c net.c
 OBJS := $(SRCS:%.c=%.o)
 CFLAGS := -g -O3 -std=c99 -MD -MP
 TARGETS := ssbench 

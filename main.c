@@ -89,6 +89,15 @@ processArgs(int argc, char **argv)
     }
   } 
 
+  if (verbose(1)) dumpArgs();
+    
+  if (Args.portCnt==0) {
+    VLPRINT(0, "%d: ERROR: Require at one -p <port> to start a socket server thread on\n",
+	    Args.portCnt);
+    usage(argv[0]);
+    return false;
+  }
+  
 #if 0
   if ((argc - optind) < 3) {
     usage(argv[0]);
@@ -100,15 +109,26 @@ processArgs(int argc, char **argv)
   Args.reconspath = argv[optind+2];
 #endif
   
-  if (verbose(1)) dumpArgs();
+
   return true;
 }
 
 int main(int argc, char **argv)
 {
   if (!processArgs(argc,argv)) return -1;
+  
+  for (int i=1; i<Args.portCnt; i++) {
+    sockserver_start(Args.ssvrs[i],
+		     true // async
+		     );
+  }
 
-  VPRINT("%s: start: \n", argv[0]);
+  // run the 0th socketserver on the main thread
+  sockserver_start(Args.ssvrs[0],
+		   false // async
+		   );
+
+  
   return 0;
 }
 
