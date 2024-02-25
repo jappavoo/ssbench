@@ -23,10 +23,14 @@ static inline void sockserver_setEpollfd(sockserver_t this, int fd) {
   this->epollfd = fd;
 }
 
-
 static inline void sockserver_setTid(sockserver_t this, pthread_t tid) {
   this->tid = tid;
 }
+
+static inline void sockserver_setMsgcnt(sockserver_t this, int c) {
+  this->msgcnt = c;
+}
+
 
 static void setnonblocking(int fd)
 {
@@ -67,7 +71,7 @@ sockserver_dumpConnection(sockserver_t this, int connfd,
   }
 }
 
-static void sockserver_processMsg(sockserver_t this, int fd)
+static void sockserver_bufferMsg(sockserver_t this, int fd)
 {
   SSVP("%d\n", fd);
 }
@@ -127,7 +131,7 @@ static void * sockserver_func(void * arg)
       } else {
 	int msgfd = events[n].data.fd;
 	SSVP("activity on:%d\n", msgfd);
-	sockserver_processMsg(this, msgfd);
+	sockserver_bufferMsg(this, msgfd);
       }
     }		   
   }
@@ -178,10 +182,18 @@ void sockserver_start(sockserver_t this, bool async)
 sockserver_t
 sockserver_new(int port, int id) {
   sockserver_t this;
+  struct sockserver_msgbuffer *mb;
+  
   this = malloc(sizeof(struct sockserver));
   assert(this);
   sockserver_init(this, port);
   sockserver_setId(this, id);
+  mb=sockserver_getMsgbufferPtr(this);
+  mb->hdr.raw = 0x0;
+  mb->data = NULL;
+  mb->n = 0;
+  sockserver_setMsgcnt(this, 0);
+  
   return this;
 }
 

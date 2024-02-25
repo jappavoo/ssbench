@@ -4,12 +4,20 @@
 // typedefs
 typedef struct sockserver * sockserver_t;
 
+struct sockserver_msgbuffer {
+  union ssbench_msghdr hdr;
+  int n;
+  uint8_t *data;
+}; 
+
 struct sockserver {
-  PortType port;
-  FDType listenFd;
-  int    epollfd;
-  int    id;
+  PortType  port;
+  FDType    listenFd;
+  int       epollfd;
+  int       id;
   pthread_t tid;
+  struct sockserver_msgbuffer msgbuffer;
+  int       msgcnt;
 };
 
 // public getters
@@ -28,6 +36,14 @@ static inline int sockserver_getEpollfd(sockserver_t this) {
 static inline pthread_t sockserver_getTid(sockserver_t this) {
   return this->tid;
 }
+static inline struct sockserver_msgbuffer *
+sockserver_getMsgbufferPtr(sockserver_t this) {
+  return &(this->msgbuffer);
+} 
+static inline pthread_t sockserver_getMsgcnt(sockserver_t this) {
+  return this->msgcnt;
+}
+
 
 // new operator 
 extern sockserver_t sockserver_new(int port, int id);
