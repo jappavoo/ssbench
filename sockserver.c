@@ -7,7 +7,7 @@ void * sockserver_func(void * arg)
   VPRINT("%p:listenFd:%d\n", this, fd);
   // add barrier
   while (1) {
-    int connfd = net_accept(fd);
+    int connfd = net_accept(fd);o
     VPRINT("%p: new connection:%d\n", this, connfd);
   }
 }

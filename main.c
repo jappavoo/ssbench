@@ -1,10 +1,5 @@
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <getopt.h>
-#include <stdbool.h>
-
 #include "ssbench.h"
+#include <getopt.h>
 
 static void usage(char *name)
 {
@@ -92,11 +87,13 @@ processArgs(int argc, char **argv)
   if (verbose(1)) dumpArgs();
     
   if (Args.portCnt==0) {
-    VLPRINT(0, "%d: ERROR: Require at one -p <port> to start a socket server thread on\n",
+    VLPRINT(0, "ERROR:%d:Require at least one -p <port> to a socket server thread\n",
 	    Args.portCnt);
     usage(argv[0]);
     return false;
   }
+
+  pthread_barrier_init(&Args.ssvrBarrier, NULL, Args.portCnt);
   
 #if 0
   if ((argc - optind) < 3) {
@@ -116,7 +113,7 @@ processArgs(int argc, char **argv)
 int main(int argc, char **argv)
 {
   if (!processArgs(argc,argv)) return -1;
-  
+
   for (int i=1; i<Args.portCnt; i++) {
     sockserver_start(Args.ssvrs[i],
 		     true // async

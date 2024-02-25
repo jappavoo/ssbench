@@ -1,11 +1,16 @@
 #ifndef __SSBENCH_H__
 #define __SSBENCH_H__
 
+#define _XOPEN_SOURCE 600 
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <stdbool.h>
+#define _XOPEN_SOURCE 600 
 #include <pthread.h>
+
+#include <sys/types.h>
 
 #include "net.h"
 #include "sockserver.h"
@@ -17,6 +22,7 @@ struct Args {
   int verbose;
   sockserver_t *ssvrs;
   int ssvrsSize;
+  pthread_barrier_t ssvrBarrier; 
 };
 
 extern struct Args Args;
