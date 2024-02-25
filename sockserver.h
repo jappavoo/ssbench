@@ -4,29 +4,26 @@
 struct sockserver {
   PortType port;
   FDType listenFd;
+  int    id;
   pthread_t tid;
-  
 };
 
 typedef struct sockserver * sockserver_t;
 
-inline int sockserver_getPort(sockserver_t this) {
+static inline int sockserver_getPort(sockserver_t this) {
   return this->port;
 }
-
-inline void sockserver_setPort(sockserver_t this, int p) {
-  this->port = p;
-}
-
-inline int sockserver_getListenFd(sockserver_t this) {
+static inline int sockserver_getListenFd(sockserver_t this) {
   return this->listenFd;
 }
-
-inline void sockserver_setListenFd(sockserver_t this, int fd) {
-  this->listenFd = fd;
+static inline int sockserver_getId(sockserver_t this) {
+  return this->id;
+}
+static inline pthread_t sockserver_getTid(sockserver_t this) {
+  return this->tid;
 }
 
-extern sockserver_t sockserver_new(int port);
+extern sockserver_t sockserver_new(int port, int id);
 
 // core methods
 extern void sockserver_dump(sockserver_t this, FILE *file);

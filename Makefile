@@ -1,6 +1,6 @@
 SRCS := main.c sockserver.c msgserver.c net.c
 OBJS := $(SRCS:%.c=%.o)
-CFLAGS := -g -O3  -MD -MP
+CFLAGS := -g -O3 -std=gnu99 -MD -MP
 TARGETS := ssbench 
 .PHONY: clean 
 

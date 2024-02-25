@@ -1,13 +1,35 @@
 #include "ssbench.h"
 
+static inline void sockserver_setPort(sockserver_t this, int p) {
+  this->port = p;
+}
+
+static inline void sockserver_setListenFd(sockserver_t this, int fd) {
+  this->listenFd = fd;
+}
+
+static inline void sockserver_setId(sockserver_t this, int id) {
+  this->id = id;
+}
+
+static inline void sockserver_setTid(sockserver_t this, pthread_t tid) {
+  this->tid = tid;
+}
+
 void * sockserver_func(void * arg)
 {
   sockserver_t this = arg;
   int fd = sockserver_getListenFd(this);
-  VPRINT("%p:listenFd:%d\n", this, fd);
-  // add barrier
+  int id = sockserver_getId(this);
+  pthread_t tid = pthread_self();
+  sockserver_setTid(this, tid);
+
+  VPRINT("%p:%d:%ld:listenFd:%d\n", this, id, tid, fd);
+
+  pthread_barrier_wait(&(Args.socketServers.barrier));
+  
   while (1) {
-    int connfd = net_accept(fd);o
+    int connfd = net_accept(fd);
     VPRINT("%p: new connection:%d\n", this, connfd);
   }
 }
@@ -48,18 +70,21 @@ void sockserver_start(sockserver_t this, bool async)
 }
 		 
 sockserver_t
-sockserver_new(int port) {
+sockserver_new(int port, int id) {
   sockserver_t this;
   this = malloc(sizeof(struct sockserver));
   assert(this);
   sockserver_init(this, port);
+  sockserver_setId(this, id);
   return this;
 }
 
 void
 sockserver_dump(sockserver_t this, FILE *file)
 {
-  fprintf(file, "this:%p listenFd:%d port:%d\n", this,
+  fprintf(file, "this:%p id:%d tid:%ld listenFd:%d port:%d\n", this,
+	  sockserver_getId(this),
+	  sockserver_getTid(this),
 	  sockserver_getListenFd(this),
 	  sockserver_getPort(this));
 }

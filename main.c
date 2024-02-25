@@ -13,15 +13,16 @@ struct Args Args = {
   .portCnt = 0,
   .workCnt = 0,
   .verbose = 0,
-  .ssvrs   = NULL,
-  .ssvrsSize = 0
+  .socketServers.array = NULL,
+  .socketServers.arraySize = 0
 };
 
 static void dumpSSrvs()
 {
   for (int i=0; i<Args.portCnt; i++) {
-    fprintf(stderr, "Args.ssvrs[%d]=%p : ",i,Args.ssvrs[i]);
-    sockserver_dump(Args.ssvrs[i], stderr);
+    fprintf(stderr, "Args.ssvrs[%d]=%p : ",i,
+	    Args.socketServers.array[i]);
+    sockserver_dump(Args.socketServers.array[i], stderr);
   }
 }
 
@@ -32,8 +33,8 @@ static void dumpArgs()
 	  "Args.verbose=%d\n",
 	  Args.portCnt,
 	  Args.workCnt,
-	  Args.ssvrs,
-	  Args.ssvrsSize,
+	  Args.socketServers.array,
+	  Args.socketServers.arraySize,
 	  Args.verbose);
   dumpSSrvs();
   
@@ -60,15 +61,19 @@ processArgs(int argc, char **argv)
 	  usage(argv[0]);
 	  return false;
 	}
-	if (Args.ssvrs == NULL) {
-	  Args.ssvrsSize = 1;
-	  Args.ssvrs = malloc(sizeof(sockserver_t)*Args.ssvrsSize);
+	if (Args.socketServers.array == NULL) {
+	  Args.socketServers.arraySize = 1;
+	  Args.socketServers.array =
+	    malloc(sizeof(sockserver_t)*Args.socketServers.arraySize);
 	}
-	if (i>=Args.ssvrsSize) {
-	  Args.ssvrsSize = Args.ssvrsSize << 1;
-	  Args.ssvrs=realloc(Args.ssvrs, sizeof(sockserver_t)*Args.ssvrsSize);
+	if (i>=Args.socketServers.arraySize) {
+	  Args.socketServers.arraySize =
+	    Args.socketServers.arraySize << 1;
+	  Args.socketServers.array =
+	    realloc(Args.socketServers.array,
+		    sizeof(sockserver_t)*Args.socketServers.arraySize);
 	}
-	Args.ssvrs[i] = sockserver_new(port);
+	Args.socketServers.array[i] = sockserver_new(port,i);
 	Args.portCnt++;
       }
       break;
@@ -87,13 +92,14 @@ processArgs(int argc, char **argv)
   if (verbose(1)) dumpArgs();
     
   if (Args.portCnt==0) {
-    VLPRINT(0, "ERROR:%d:Require at least one -p <port> to a socket server thread\n",
-	    Args.portCnt);
+    VLPRINT(0, "ERROR:%d:Require at least one -p <port> to a socket server"
+	    "thread\n", Args.portCnt);
     usage(argv[0]);
     return false;
   }
 
-  pthread_barrier_init(&Args.ssvrBarrier, NULL, Args.portCnt);
+  pthread_barrier_init(&Args.socketServers.barrier, NULL,
+		       Args.portCnt);
   
 #if 0
   if ((argc - optind) < 3) {
@@ -115,13 +121,13 @@ int main(int argc, char **argv)
   if (!processArgs(argc,argv)) return -1;
 
   for (int i=1; i<Args.portCnt; i++) {
-    sockserver_start(Args.ssvrs[i],
+    sockserver_start(Args.socketServers.array[i],
 		     true // async
 		     );
   }
 
   // run the 0th socketserver on the main thread
-  sockserver_start(Args.ssvrs[0],
+  sockserver_start(Args.socketServers.array[0],
 		   false // async
 		   );
 
