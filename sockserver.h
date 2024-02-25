@@ -10,13 +10,20 @@ struct sockserver_msgbuffer {
   uint8_t *data;
 }; 
 
+struct sockserver_connection {
+  int fd;
+  struct sockserver_msgbuffer mbuf;
+};
+
 struct sockserver {
   PortType  port;
   FDType    listenFd;
   int       epollfd;
   int       id;
   pthread_t tid;
-  struct sockserver_msgbuffer msgbuffer;
+  struct sockserver_connection *connections;
+  int       connmax;
+  int       numconn;
   int       msgcnt;
 };
 
@@ -36,14 +43,19 @@ static inline int sockserver_getEpollfd(sockserver_t this) {
 static inline pthread_t sockserver_getTid(sockserver_t this) {
   return this->tid;
 }
-static inline struct sockserver_msgbuffer *
-sockserver_getMsgbufferPtr(sockserver_t this) {
-  return &(this->msgbuffer);
+static inline struct sockserver_connection *
+sockserver_getConnections(sockserver_t this) {
+  return this->connections;
 } 
-static inline pthread_t sockserver_getMsgcnt(sockserver_t this) {
+static inline int sockserver_getNumconn(sockserver_t this) {
+  return this->numconn;
+}
+static inline int sockserver_getconnmax(sockserver_t this) {
+  return this->connmax;
+}
+static inline int sockserver_getMsgcnt(sockserver_t this) {
   return this->msgcnt;
 }
-
 
 // new operator 
 extern sockserver_t sockserver_new(int port, int id);

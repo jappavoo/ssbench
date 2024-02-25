@@ -31,6 +31,19 @@ static inline void sockserver_setMsgcnt(sockserver_t this, int c) {
   this->msgcnt = c;
 }
 
+static inline void sockserver_setConnections(sockserver_t this,
+					     struct sockserver_connection *connections) {
+  this->connections = connections;
+}
+
+static inline void sockserver_setConnmax(sockserver_t this, int n) {
+  this->numconn = n;
+}
+static inline void sockserver_setNumconn(sockserver_t this, int n) {
+  this->numconn = n;
+}
+
+
 
 static void setnonblocking(int fd)
 {
@@ -73,6 +86,7 @@ sockserver_dumpConnection(sockserver_t this, int connfd,
 
 static void sockserver_bufferMsg(sockserver_t this, int fd)
 {
+  struct sockserver_msgbuffer msgbuffer;
   SSVP("%d\n", fd);
 }
 
@@ -178,21 +192,25 @@ void sockserver_start(sockserver_t this, bool async)
   if (async) pthread_create(&tid, NULL, &sockserver_func, this);
   else sockserver_func(this);
 }
-		 
+
+#define INITIAL_MAX_CONN  4
 sockserver_t
 sockserver_new(int port, int id) {
   sockserver_t this;
-  struct sockserver_msgbuffer *mb;
+  struct sockserver_connection *connections;
   
   this = malloc(sizeof(struct sockserver));
   assert(this);
   sockserver_init(this, port);
   sockserver_setId(this, id);
-  mb=sockserver_getMsgbufferPtr(this);
-  mb->hdr.raw = 0x0;
-  mb->data = NULL;
-  mb->n = 0;
   sockserver_setMsgcnt(this, 0);
+
+  // initialize connection array
+  int conmax = INITIAL_MAX_CONN;
+  connections = malloc(sizeof(struct sockserver_connection) * conmax);
+  sockserver_setConnmax(this, conmax);
+  sockserver_setConnections(this, connections);
+  sockserver_setNumconn(this, 0); 
   
   return this;
 }
