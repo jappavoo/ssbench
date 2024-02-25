@@ -56,3 +56,5 @@ dkms.conf
 
 # binary productions
 ssbench
+
+ext/*
