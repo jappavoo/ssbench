@@ -1,8 +1,6 @@
 #include "ssbench.h"
 #include <unistd.h>
 #include <fcntl.h>
-#include <sys/socket.h>
-#include <sys/epoll.h>
 #include <arpa/inet.h>
 
 #define SSVP(fmt,...) VPRINT("%p:%d:%lx:" fmt, this, this->id, this->tid, __VA_ARGS__)
@@ -31,19 +29,13 @@ static inline void sockserver_setMsgcnt(sockserver_t this, int c) {
   this->msgcnt = c;
 }
 
-static inline void sockserver_setConnections(sockserver_t this,
-					     struct sockserver_connection *connections) {
-  this->connections = connections;
-}
-
-static inline void sockserver_setConnmax(sockserver_t this, int n) {
-  this->numconn = n;
-}
 static inline void sockserver_setNumconn(sockserver_t this, int n) {
   this->numconn = n;
 }
 
-
+static inline void sockserver_incNumconn(sockserver_t this) {
+  this->numconn++;
+}
 
 static void setnonblocking(int fd)
 {
@@ -56,11 +48,12 @@ static void setnonblocking(int fd)
 }
 
 static void
-sockserver_dumpConnection(sockserver_t this, int connfd,
-			  struct sockaddr_storage *addrstorage,
-			  socklen_t addrlen)
+sockserver_connection_dump(sockserver_t this, struct sockserver_connection *c) 
 {
-  struct sockaddr *addr = (struct sockaddr *)addrstorage; 
+  int connfd = c->fd;
+  struct sockaddr *addr = (struct sockaddr *)&(c->addr);
+  socklen_t addrlen = c->addrlen;
+  
   if (verbose(1)) {
     SSVP("new connection: %d sa_fam:%d len:%d\n",  connfd, addr->sa_family, addrlen);
     if (addr->sa_family == AF_INET) {
@@ -133,10 +126,25 @@ static void * sockserver_func(void * arg)
 	  perror("accept");
 	  exit(EXIT_FAILURE);
 	}
-	sockserver_dumpConnection(this, connfd, &addr, addrlen);
 	setnonblocking(connfd);
-	ev.events = EPOLLIN | EPOLLET;
+	// create a new connection object for this connection
+	struct sockserver_connection *co = malloc(sizeof(struct sockserver_connection));
+	co->addr         = addr;
+	co->addrlen      = addrlen;
+	co->fd           = connfd;
+	co->msgcnt       = 0;
+	co->mbuf.hdr.raw = 0;
+	co->mbuf.n       = 0;
+	co->mbuf.data    = NULL;
+	co->ss           = this;
+	
+	sockserver_incNumconn(this);
+	sockserver_connection_dump(this, co);
+	
+	ev.events  = EPOLLIN | EPOLLET;
 	ev.data.fd = connfd;
+	ev.data.ptr     = co;
+	
 	if (epoll_ctl(epollfd, EPOLL_CTL_ADD, connfd,
 		      &ev) == -1) {
 	  perror("epoll_ctl: connfd");
@@ -193,7 +201,6 @@ void sockserver_start(sockserver_t this, bool async)
   else sockserver_func(this);
 }
 
-#define INITIAL_MAX_CONN  4
 sockserver_t
 sockserver_new(int port, int id) {
   sockserver_t this;
@@ -204,12 +211,6 @@ sockserver_new(int port, int id) {
   sockserver_init(this, port);
   sockserver_setId(this, id);
   sockserver_setMsgcnt(this, 0);
-
-  // initialize connection array
-  int conmax = INITIAL_MAX_CONN;
-  connections = malloc(sizeof(struct sockserver_connection) * conmax);
-  sockserver_setConnmax(this, conmax);
-  sockserver_setConnections(this, connections);
   sockserver_setNumconn(this, 0); 
   
   return this;

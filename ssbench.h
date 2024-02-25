@@ -8,6 +8,8 @@
 #include <stdbool.h>
 #include <pthread.h>
 #include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/epoll.h>
 
 #include "net.h"
 #include "msg.h"

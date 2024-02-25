@@ -11,8 +11,12 @@ struct sockserver_msgbuffer {
 }; 
 
 struct sockserver_connection {
+  struct sockaddr_storage addr;
+  socklen_t addrlen;
   int fd;
+  int       msgcnt;
   struct sockserver_msgbuffer mbuf;
+  sockserver_t ss;
 };
 
 struct sockserver {
@@ -21,8 +25,6 @@ struct sockserver {
   int       epollfd;
   int       id;
   pthread_t tid;
-  struct sockserver_connection *connections;
-  int       connmax;
   int       numconn;
   int       msgcnt;
 };
@@ -43,15 +45,8 @@ static inline int sockserver_getEpollfd(sockserver_t this) {
 static inline pthread_t sockserver_getTid(sockserver_t this) {
   return this->tid;
 }
-static inline struct sockserver_connection *
-sockserver_getConnections(sockserver_t this) {
-  return this->connections;
-} 
 static inline int sockserver_getNumconn(sockserver_t this) {
   return this->numconn;
-}
-static inline int sockserver_getconnmax(sockserver_t this) {
-  return this->connmax;
 }
 static inline int sockserver_getMsgcnt(sockserver_t this) {
   return this->msgcnt;
