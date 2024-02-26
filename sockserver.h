@@ -3,6 +3,8 @@
 
 // typedefs
 typedef struct sockserver * sockserver_t;
+typedef struct sockserver_connection * sockserver_connection_t;
+typedef struct sockserver_msgbuffer * socksever_msgbuffer_t;
 
 struct sockserver_msgbuffer {
   union ssbench_msghdr hdr;

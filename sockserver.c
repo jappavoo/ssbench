@@ -47,6 +47,22 @@ static void setnonblocking(int fd)
   flags = fcntl(fd, F_SETFD);  
 }
 
+static sockserver_connection_t
+sockserver_connection_new(struct sockaddr_storage addr, socklen_t addrlen,
+			  int fd, sockserver_t ss)
+{
+  	sockserver_connection_t co = malloc(sizeof(struct sockserver_connection));
+	co->addr         = addr;
+	co->addrlen      = addrlen;
+	co->fd           = fd;
+	co->msgcnt       = 0;
+	co->mbuf.hdr.raw = 0;
+	co->mbuf.n       = 0;
+	co->mbuf.data    = NULL;
+	co->ss           = ss;
+	return co;
+}
+
 static void
 sockserver_connection_dump(sockserver_t this, struct sockserver_connection *c) 
 {
@@ -88,19 +104,27 @@ static void sockserver_bufferMsg(sockserver_t this, int fd)
 static void * sockserver_func(void * arg)
 {
   sockserver_t this = arg;
-  int listenfd = sockserver_getListenFd(this);
+  // dummy connection object to use as
+  // an epoll handle could have used &listenfd
+  // but decided this looks better ;-)
+  struct {
+    int fd;
+  } listenConnection = {
+    .fd =  sockserver_getListenFd(this)
+  };
   int id = sockserver_getId(this);
   int epollfd = sockserver_getEpollfd(this);
   pthread_t tid = pthread_self();
   struct epoll_event ev, events[MAX_EVENTS];
-
+  
   sockserver_setTid(this, tid);  
-  SSVP("listenFd:%d:epollfd:%d\n", listenfd, epollfd);
+  SSVP("listenConnection:%p:listenFd:%d:epollfd:%d\n",
+       &listenConnection,listenConnection.fd, epollfd);
 
   ev.events = EPOLLIN;
-  ev.data.fd = listenfd;
+  ev.data.ptr = &listenConnection;
 
-  if (epoll_ctl(epollfd, EPOLL_CTL_ADD, listenfd, &ev) == -1) {
+  if (epoll_ctl(epollfd, EPOLL_CTL_ADD, listenConnection.fd, &ev) == -1) {
     perror("epoll_ctl: listenfd");
     exit(EXIT_FAILURE);
   }
@@ -115,35 +139,29 @@ static void * sockserver_func(void * arg)
     }
     
     for (int n = 0; n < nfds; ++n) {
-      if (events[n].data.fd == listenfd) {
+      void * activeConnection = events[n].data.ptr;
+      SSVP("activeConnection:%p\n", activeConnection);
+      if ( activeConnection == &listenConnection ) {
 	struct sockaddr_storage addr;
 	// addrlen must be initilized to size of addr in bytes.  It will be
 	// updated with lenght of peer address (see man accept). If you don't do this
 	// you will not get a valid address sent back
  	socklen_t addrlen = sizeof(struct sockaddr_storage); 
-	int  connfd = net_accept(listenfd, &addr, &addrlen);
+	int  connfd = net_accept(listenConnection.fd, &addr, &addrlen);
 	if (connfd == -1) {
 	  perror("accept");
 	  exit(EXIT_FAILURE);
 	}
 	setnonblocking(connfd);
 	// create a new connection object for this connection
-	struct sockserver_connection *co = malloc(sizeof(struct sockserver_connection));
-	co->addr         = addr;
-	co->addrlen      = addrlen;
-	co->fd           = connfd;
-	co->msgcnt       = 0;
-	co->mbuf.hdr.raw = 0;
-	co->mbuf.n       = 0;
-	co->mbuf.data    = NULL;
-	co->ss           = this;
-	
+	sockserver_connection_t co = sockserver_connection_new(addr, addrlen, connfd,
+							       this);
 	sockserver_incNumconn(this);
 	sockserver_connection_dump(this, co);
 	
-	ev.events  = EPOLLIN | EPOLLET;
-	ev.data.fd = connfd;
-	ev.data.ptr     = co;
+	ev.events   = EPOLLIN | EPOLLET | EPOLLHUP | EPOLLRDHUP | EPOLLERR;
+	//	ev.data.fd  = connfd;
+	ev.data.ptr = co;
 	
 	if (epoll_ctl(epollfd, EPOLL_CTL_ADD, connfd,
 		      &ev) == -1) {
@@ -151,9 +169,12 @@ static void * sockserver_func(void * arg)
 	  exit(EXIT_FAILURE);
 	}
       } else {
-	int msgfd = events[n].data.fd;
-	SSVP("activity on:%d\n", msgfd);
-	sockserver_bufferMsg(this, msgfd);
+	sockserver_connection_t co = activeConnection;
+	uint32_t evnts = events[n].events;
+	SSVP("activity on connection:%p: events0x%x fd:%d\n",
+	     co, evnts, co->fd);
+	
+	//	sockserver_connection_activity(this, msgfd);
       }
     }		   
   }
