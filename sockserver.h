@@ -29,6 +29,7 @@ struct sockserver {
   pthread_t tid;
   int       numconn;
   int       msgcnt;
+  char      name[16];
 };
 
 // public getters

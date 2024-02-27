@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include "ssbench.h"
 #include "hexdump.h"
 #include <unistd.h>
@@ -62,6 +63,14 @@ static void msgbuf_reset(sockserver_msgbuffer_t mb)
   mb->qe      = NULL;
 }
 
+
+static void msgbuf_dump(sockserver_msgbuffer_t mb)
+{
+  fprintf(stderr, "%p:hdr.raw:%lx (opid:%x datalen:%d) n:%d qe:%p\n",
+	  mb, mb->hdr.raw, mb->hdr.fields.opid, mb->hdr.fields.datalen,
+	  mb->n, mb->qe);
+}
+
 static sockserver_connection_t
 sockserver_connection_new(struct sockaddr_storage addr, socklen_t addrlen,
 			  int fd, sockserver_t ss)
@@ -83,10 +92,12 @@ sockserver_connection_dump(sockserver_t this, struct sockserver_connection *c)
   int connfd = c->fd;
   struct sockaddr *addr = (struct sockaddr *)&(c->addr);
   socklen_t addrlen = c->addrlen;
-  
+  int msgcnt = c->msgcnt;
+  void *ss = c->ss;
+    
   if (verbose(1)) {
-    SSVP("new connection: %d sa_fam:%d len:%d\n",
-	 connfd, addr->sa_family, addrlen);
+    fprintf(stderr,"%p:ss:%p fd:%d msgcnt:%d sa_fam:%d addrlen:%d addr:",
+	    c,ss, connfd, msgcnt, addr->sa_family, addrlen);
     if (addr->sa_family == AF_INET) {
       struct sockaddr_in *iaddr = (struct sockaddr_in *)(addr);
       int iport = ntohs(iaddr->sin_port);
@@ -94,18 +105,35 @@ sockserver_connection_dump(sockserver_t this, struct sockserver_connection *c)
 	uint32_t v;
 	uint8_t oc[sizeof(uint32_t)];
       } a = {.v = ntohl((uint32_t)(iaddr->sin_addr.s_addr))};
-      fprintf(stderr, "addr:%u.%u.%u.%u (%02x:%02x:%02x:%02x) port:%u (%04x)\n",
+      fprintf(stderr, "%u.%u.%u.%u(%02x:%02x:%02x:%02x) port:%u(%04x) ",
 	      a.oc[3], a.oc[2], a.oc[1], a.oc[0],
 	      a.oc[3], a.oc[2], a.oc[1], a.oc[0],
 	      iport,iport);
     } else {
-      fprintf(stderr, "addr->sa_data");
       for (int j=0; j<addrlen; j++) {
 	int v = addr->sa_data[j];
 	fprintf(stderr,":%02hx(%d)", v,v);
       }
     }
+    msgbuf_dump(&c->mbuf);
   }
+}
+
+static void sockserver_cleanupConnection(sockserver_t this,
+					 sockserver_connection_t co)
+{
+  struct epoll_event dummyev;
+  SSVP("co:%p \n\t", co);
+  sockserver_connection_dump(this, co);
+  if (co->mbuf.n != 0) NYI;  // connection was lost in the middle of a message
+  // for backwards compatiblity we use dummy versus NULL see bugs section
+  // of man epoll_ctl
+  if (epoll_ctl(this->epollfd, EPOLL_CTL_DEL, co->fd, &dummyev) == -1) {
+    perror("epoll_ctl: EPOLL_CTL_DEL fd");
+    exit(EXIT_FAILURE);
+  }
+  close(co->fd);
+  free(co);
 }
 
 static enum QueueEntryFindRC
@@ -114,7 +142,7 @@ sockserver_findOpServerQueueEntry(sockserver_t this, union ssbench_msghdr *h,
 {
   *qe = NULL;
   return Q_NONE;
-}  
+}
 
 
 static void sockserver_serveConnection(sockserver_t this,
@@ -207,8 +235,10 @@ static void * sockserver_func(void * arg)
   int epollfd = sockserver_getEpollfd(this);
   pthread_t tid = pthread_self();
   struct epoll_event ev, events[MAX_EVENTS];
-  
-  sockserver_setTid(this, tid);  
+
+  sockserver_setTid(this, tid);
+  snprintf(this->name,sizeof(this->name),"ss%d", this->port);
+  pthread_setname_np(tid, this->name);
   SSVP("listenConnection:%p:listenFd:%d:epollfd:%d\n",
        &listenConnection,listenConnection.fd, epollfd);
 
@@ -243,6 +273,7 @@ static void * sockserver_func(void * arg)
 	  perror("accept");
 	  exit(EXIT_FAILURE);
 	}
+        SSVP("new connection:%d\n\t", connfd);
 	// epoll man page recommends non-blocking io for edgetriggered use 
 	setnonblocking(connfd);
 	// create a new connection object for this connection
@@ -275,16 +306,19 @@ static void * sockserver_func(void * arg)
 	  SSVP("co:%p fd:%d got EPOLLHUP(%x) evnts:%x\n",
 	       co, co->fd, EPOLLHUP, evnts);
 	  evnts = evnts & ~EPOLLHUP;
+	  NYI;
 	}
 	if (evnts & EPOLLRDHUP) {
-	  SSVP("co:%p fd:%d got EPOLLRDHUP(%x) evnts:%x",
+	  SSVP("connection lost: co:%p fd:%d got EPOLLRDHUP(%x) evnts:%x\n",
 	       co, co->fd, EPOLLRDHUP, evnts);
 	  evnts = evnts & ~EPOLLRDHUP;
+	  sockserver_cleanupConnection(this, co);
 	}
 	if (evnts & EPOLLERR) {
 	  SSVP("co:%p fd:%d got EPOLLERR(%x) evnts:%x",
 	       co, co->fd, EPOLLERR, evnts);
 	  evnts = evnts & ~EPOLLERR;
+	  NYI;
 	}
 	if (evnts != 0) {
 	  SSVP("co:%p fd:%d unknown events evnts:%x",
