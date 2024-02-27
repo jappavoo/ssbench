@@ -30,6 +30,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
+#include <assert.h>
 #include "net.h"
 
 extern int
@@ -217,3 +218,31 @@ net_readn(FDType fd, void *vptr, size_t n)
   return(n - nleft);              /* return >= 0 */
 }
 /* end readn */
+
+extern ssize_t
+net_nonblocking_readn(FDType fd, void * vptr, size_t n)
+{
+  size_t  nleft;
+  ssize_t nrecv;
+  char    *ptr;
+  
+  ptr   = vptr;
+  nleft = n;
+
+  while (nleft > 0) {
+    // MSG_NOSIGNAL : do not raise sigpipe on connection loss
+    nrecv = recv(fd, ptr, nleft, MSG_NOSIGNAL);
+    fprintf(stderr, "%s: < %ld\n", __func__, nrecv);
+    if (nrecv < 0) {
+      if (errno == EAGAIN) break;     // no more data on socket right now
+      if (errno == EINTR) continue;   // syscall interrupted
+      perror("recv");
+      assert(0);
+    }
+    
+    nleft -= nrecv;
+    ptr   += nrecv;
+  }
+  
+  return (n - nleft);
+}

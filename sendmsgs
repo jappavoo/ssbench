@@ -1,0 +1,12 @@
+#!/bin/bash
+
+port=${port:-42421}
+
+
+while read op data
+do
+	op=$((16#$op))
+	len=${#data}
+        ./msghdr $op $len
+	echo -n $data
+done

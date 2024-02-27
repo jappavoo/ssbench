@@ -1,15 +1,15 @@
 #ifndef __SOCKSERVER_H__
 #define __SOCKSERVER_H__
-
+//012345678901234567890123456789012345678901234567890123456789012345678901234567
 // typedefs
 typedef struct sockserver * sockserver_t;
 typedef struct sockserver_connection * sockserver_connection_t;
-typedef struct sockserver_msgbuffer * socksever_msgbuffer_t;
+typedef struct sockserver_msgbuffer * sockserver_msgbuffer_t;
 
 struct sockserver_msgbuffer {
   union ssbench_msghdr hdr;
   int n;
-  uint8_t *data;
+  queue_entry_t qe;
 }; 
 
 struct sockserver_connection {

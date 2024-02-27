@@ -3,6 +3,7 @@
 
 union ssbench_msghdr {
   uint64_t raw;
+  char     buf[sizeof(uint64_t)];
   struct {
     uint32_t opid;
     uint32_t datalen;

@@ -34,5 +34,6 @@ extern int     net_accept(FDType fd, void *addr, void *addrlen);
 
 extern ssize_t net_writen(FDType fd, const void *vptr, size_t n);
 extern ssize_t net_readn(FDType fd, void *vptr, size_t n);
+extern ssize_t net_nonblocking_readn(FDType fd, void *vptr, size_t n);
 
 #endif

@@ -1,0 +1,16 @@
+#!/bin/bash
+# simple script to create a ssbench message header
+# and write it to stdout
+# sbench message header is a binary 4 bytes little endian operation id
+# followed by a binary 4 byte data length.  This script assumes
+# both values are in decimal
+
+op=$1
+len=$2
+
+obytes=$(printf "%08x" $op)
+lbytes=$(printf "%08x"  $len)
+
+# little endian byte values 
+echo -n -e "\x${obytes:6:2}\x${obytes:4:2}\x${obytes:2:2}\x${obytes:0:2}"
+echo -n -e "\x${lbytes:6:2}\x${lbytes:4:2}\x${lbytes:2:2}\x${lbytes:0:2}"

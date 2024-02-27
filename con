@@ -1,0 +1,9 @@
+#!/bin/bash
+
+# simple script to connect to an ssbench socket server thread on the specified
+# port and address
+
+port=${1:-42421}
+address=${2:-127.0.0.1}
+
+socat TCP-CONNECT:${address}:${port} -

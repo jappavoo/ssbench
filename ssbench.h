@@ -13,6 +13,7 @@
 
 #include "net.h"
 #include "msg.h"
+#include "queue.h"
 #include "sockserver.h"
 #include "opserver.h"
 
@@ -37,4 +38,5 @@ extern struct Args Args;
 
 static inline bool verbose(int l) { return Args.verbose >= l; }
 
+#define NYI { fprintf(stderr, "%s: %d: NYI\n", __func__, __LINE__); } 
 #endif
