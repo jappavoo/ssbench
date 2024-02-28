@@ -331,7 +331,7 @@ static void * sockserver_func(void * arg)
 }
 
 static void
-sockserver_init(sockserver_t this, int port)
+sockserver_init(sockserver_t this, int port, int id)
 {
   int rc;
   int fd;
@@ -350,6 +350,9 @@ sockserver_init(sockserver_t this, int port)
   
   sockserver_setListenFd(this, fd);
   sockserver_setPort(this, port);
+  sockserver_setId(this, id);
+  sockserver_setMsgcnt(this, 0);
+  sockserver_setNumconn(this, 0); 
 
   if (net_listen(fd) < 0) {
     VLPRINT(0, "Error: net_listen: %d:%d", fd, port);
@@ -375,15 +378,10 @@ void sockserver_start(sockserver_t this, bool async)
 sockserver_t
 sockserver_new(int port, int id) {
   sockserver_t this;
-  struct sockserver_connection *connections;
   
   this = malloc(sizeof(struct sockserver));
   assert(this);
-  sockserver_init(this, port);
-  sockserver_setId(this, id);
-  sockserver_setMsgcnt(this, 0);
-  sockserver_setNumconn(this, 0); 
-  
+  sockserver_init(this, port, id);  
   return this;
 }
 

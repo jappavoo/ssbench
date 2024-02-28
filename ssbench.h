@@ -11,6 +11,12 @@
 #include <sys/socket.h>
 #include <sys/epoll.h>
 
+#include <uthash.h>
+#include "ext/tsclog/cacheline.h"
+#include "ext/tsclog/ntstore.h"
+#include "ext/tsclog/now.h"
+#include "ext/tsclog/buffer.h"
+#include "ext/tsclog/tsclogc.h"
 #include "net.h"
 #include "msg.h"
 #include "queue.h"

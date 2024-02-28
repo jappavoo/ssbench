@@ -6,10 +6,16 @@ typedef struct opserver * opserver_t;
 typedef void * opserver_func(opserver_t this);
 
 struct opserver {
-  uint32_t id;
+  uint32_t       id;
+  pthread_t      tid;
+  size_t         maxmsgsize;
+  size_t         qlen;
   opserver_func *func;
-  pthread_t tid;
+  UT_hash_handle hh;
+  struct queue   queue;
 };
+
+extern opserver_t ophashtable;
 
 // public getters
 static inline int opserver_getId(opserver_t this) {
@@ -23,7 +29,8 @@ static inline pthread_t opserver_getTid(opserver_t this) {
 }
 
 // new operator 
-extern opserver_t opserver_new(int id, opserver_func *func, int qlen);
+extern opserver_t opserver_new(int id, opserver_func *func,
+			       size_t maxmsgsize, int qlen);
 
 // core mothods
 extern void opserver_start();
