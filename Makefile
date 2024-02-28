@@ -1,4 +1,4 @@
-SRCS := main.c sockserver.c opserver.c net.c hexdump.c
+SRCS := main.c sockserver.c queue.c opserver.c net.c hexdump.c
 OBJS := $(SRCS:%.c=%.o) ext/tsclog/tsclog.o
 O:=0
 CFLAGS += -g -O${O} -std=gnu99 -MD -MP

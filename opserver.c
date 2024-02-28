@@ -2,10 +2,26 @@
 
 opserver_t ophashtable = NULL;
 
-static void opsever_setId(opserver_t this, uint32_t id)
+static void opserver_setId(opserver_t this, uint32_t id)
 {
   this->id = id;
 }
+
+static void opserver_setFunc(opserver_t this, opserver_func *func)
+{
+  this->func = func;
+}
+
+static void opserver_setMaxmsgsize(opserver_t this, size_t maxmsgsize)
+{
+  this->maxmsgsize = maxmsgsize;
+}
+
+static void opserver_setQlen(opserver_t this, size_t qlen)
+{
+  this->qlen = qlen;
+}
+
 static void opserver_init(opserver_t this, uint32_t id, opserver_func *func,
 			  size_t maxmsgsize, size_t qlen)
 {
@@ -18,7 +34,7 @@ static void opserver_init(opserver_t this, uint32_t id, opserver_func *func,
 }
 
 opserver_t opserver_new(uint32_t id, opserver_func *func,
-			size_t maxmsgsize, size_t qlen) {
+			size_t maxmsgsize, int qlen) {
   opserver_t this;
 
   // for each queue entry required we need a queue_entry struct plus
