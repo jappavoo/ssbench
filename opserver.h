@@ -12,11 +12,10 @@ struct opserver {
   int            qlen;
   opserver_func *func;
   UT_hash_handle hh;
+  cpu_set_t      cpumask;
+  semid_t        semid;
   struct queue   queue;
 };
-
-extern opserver_t ophashtable;
-
 // public getters
 static inline int opserver_getId(opserver_t this) {
   return this->id;

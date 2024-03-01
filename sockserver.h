@@ -30,6 +30,7 @@ struct sockserver {
   int       numconn;
   int       msgcnt;
   char      name[16];
+  cpu_set_t cpumask;
 };
 
 // public getters

@@ -1,6 +1,6 @@
+#define _GNU_SOURCE
 #include "ssbench.h"
 
-opserver_t ophashtable = NULL;
 
 static void opserver_setId(opserver_t this, uint32_t id)
 {
@@ -22,18 +22,19 @@ static void opserver_setQlen(opserver_t this, size_t qlen)
   this->qlen = qlen;
 }
 
-static void opserver_init(opserver_t this, uint32_t id, opserver_func *func,
-			  size_t maxmsgsize, size_t qlen)
+static void
+opserver_init(opserver_t this, uint32_t id, opserver_func *func,
+	      size_t maxmsgsize, size_t qlen)
 {
   opserver_setId(this, id);
   opserver_setFunc(this, func);
   opserver_setMaxmsgsize(this, maxmsgsize);
   opserver_setQlen(this, qlen);
   queue_init(&(this->queue),qlen);
-  HASH_ADD(hh, ophashtable, id, sizeof(this->id), this);
 }
 
-opserver_t opserver_new(uint32_t id, opserver_func *func,
+opserver_t
+opserver_new(uint32_t id, opserver_func *func,
 			size_t maxmsgsize, int qlen) {
   opserver_t this;
 
@@ -44,5 +45,5 @@ opserver_t opserver_new(uint32_t id, opserver_func *func,
 		((sizeof(struct queue_entry) + maxmsgsize) * qlen));
   assert(this);
   opserver_init(this, id, func, maxmsgsize, qlen);
-  
+  return this;
 }

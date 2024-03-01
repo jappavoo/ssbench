@@ -1,5 +1,8 @@
+// _GNU_SOURCE is required to pickup getcpu
+#define _GNU_SOURCE
 #include "ssbench.h"
 #include <getopt.h>
+#include <sys/sysinfo.h>
 
 static void usage(char *name)
 {
@@ -10,11 +13,15 @@ static void usage(char *name)
 }
 
 struct Args Args = {
-  .portCnt = 0,
-  .workCnt = 0,
-  .verbose = 0,
-  .socketServers.array = NULL,
-  .socketServers.arraySize = 0
+  .portCnt                 = 0,
+  .workCnt                 = 0,
+  .verbose                 = 0,
+  .totalcpus               = 0,
+  .availcpus               = 0,
+  .socketServers.array     = NULL,
+  .socketServers.arraySize = 0,
+  .opServers.hashtable     = NULL,
+  .opServers.num           = 0
 };
 
 static void dumpSSrvs()
@@ -26,24 +33,55 @@ static void dumpSSrvs()
   }
 }
 
+static void dumpOSrvs()
+{
+}
+
 static void dumpArgs()
 {
   fprintf(stderr, "Args.portCnt=%d Args.workCnt=%d\n"
-	  "Args.ssvrs=%p, Args.ssvrs_size=%d\n" 
+	  "Args.ssvrs=%p, Args.ssvrs_size=%d\n"
+	  "Args.osvrs=%p  Args.osvrs.num=%d\n"
+	  "Args.totalcpus=%u, Args.availcpus=%u\n"
 	  "Args.verbose=%d\n",
 	  Args.portCnt,
 	  Args.workCnt,
 	  Args.socketServers.array,
 	  Args.socketServers.arraySize,
+	  Args.opServers.hashtable,
+	  Args.opServers.num,
+	  Args.totalcpus, Args.availcpus,
 	  Args.verbose);
   dumpSSrvs();
-  
+  dumpOSrvs();
+}
+
+static bool parseCPUSet(char *, cpu_set_t * mask)
+{
+#if 0
+  while (*endptr) {
+    char *rest = endptr+1;
+    if (*rest==0) break;
+    int cpu = strtod(rest, &endptr);
+    if (endptr != rest) fprintf(stderr, "cpu:%d\n", cpu);
+    else break;
+  }
+#endif
+  return false;
 }
 
 static bool
 processArgs(int argc, char **argv)
 {
   char opt;
+
+  unsigned int  cpu, node;
+
+  Args.totalcpus = get_nprocs_conf();
+  Args.availcpus = get_nprocs();
+  
+  getcpu(&cpu, &node);
+
   while ((opt = getopt(argc, argv, "hp:w:v")) != -1) {
     switch (opt) {
     case 'h':
@@ -53,6 +91,7 @@ processArgs(int argc, char **argv)
       {
 	int port;
 	char *endptr;
+	cpu_set_t cpumask;
 	int i = Args.portCnt;
 	
 	port = strtod(optarg, &endptr);
@@ -61,6 +100,8 @@ processArgs(int argc, char **argv)
 	  usage(argv[0]);
 	  return false;
 	}
+	if (*endptr) parseCPUSet(endptr, &cpumask);
+	
 	if (Args.socketServers.array == NULL) {
 	  Args.socketServers.arraySize = 1;
 	  Args.socketServers.array =
@@ -98,9 +139,12 @@ processArgs(int argc, char **argv)
     return false;
   }
 
+  pthread_barrier_init(&Args.opServers.barrier, NULL,
+		       Args.opServers.num);
+
   pthread_barrier_init(&Args.socketServers.barrier, NULL,
 		       Args.portCnt);
-  
+
 #if 0
   if ((argc - optind) < 3) {
     usage(argv[0]);
