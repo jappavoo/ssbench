@@ -55,9 +55,12 @@ static inline int sockserver_getNumconn(sockserver_t this) {
 static inline int sockserver_getMsgcnt(sockserver_t this) {
   return this->msgcnt;
 }
-
+static inline cpu_set_t sockserver_getCpumask(sockserver_t this)
+{
+  return this->cpumask;
+}
 // new operator 
-extern sockserver_t sockserver_new(int port, int id);
+extern sockserver_t sockserver_new(int port, int id, cpu_set_t mask);
 
 // core methods
 extern void sockserver_dump(sockserver_t this, FILE *file);

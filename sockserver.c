@@ -46,6 +46,10 @@ static inline void sockserver_incNumconn(sockserver_t this) {
   this->numconn++;
 }
 
+static inline void sockserver_setCpumask(sockserver_t this, cpu_set_t cpumask) {
+  this->cpumask = cpumask;
+}
+
 static void setnonblocking(int fd)
 {
   int flags;
@@ -234,11 +238,24 @@ static void * sockserver_func(void * arg)
   int id = sockserver_getId(this);
   int epollfd = sockserver_getEpollfd(this);
   pthread_t tid = pthread_self();
+  cpu_set_t cpumask = sockserver_getCpumask(this);
   struct epoll_event ev, events[MAX_EVENTS];
-
+  
   sockserver_setTid(this, tid);
   snprintf(this->name,sizeof(this->name),"ss%d", this->port);
   pthread_setname_np(tid, this->name);
+  
+  if (verbose(1)) {
+    assert(pthread_getaffinity_np(tid, sizeof(cpumask), &cpumask)==0);
+    SSVP("%s", "cpuaffinity:");
+    for (int j = 0; j < CPU_SETSIZE; j++) {
+      if (CPU_ISSET(j, &cpumask)) {
+	fprintf(stderr, "%d ", j);
+      }
+    }
+    fprintf(stderr, "\n");
+  }
+
   SSVP("listenConnection:%p:listenFd:%d:epollfd:%d\n",
        &listenConnection,listenConnection.fd, epollfd);
 
@@ -250,7 +267,7 @@ static void * sockserver_func(void * arg)
     exit(EXIT_FAILURE);
   }
 
-  pthread_barrier_wait(&(Args.socketServers.barrier));
+  pthread_barrier_wait(&(Args.inputServers.barrier));
   
   for (;;) {
     int nfds = epoll_wait(epollfd, events, MAX_EVENTS, -1);
@@ -331,7 +348,7 @@ static void * sockserver_func(void * arg)
 }
 
 static void
-sockserver_init(sockserver_t this, int port, int id)
+sockserver_init(sockserver_t this, int port, int id, cpu_set_t cpumask)
 {
   int rc;
   int fd;
@@ -353,7 +370,8 @@ sockserver_init(sockserver_t this, int port, int id)
   sockserver_setId(this, id);
   sockserver_setMsgcnt(this, 0);
   sockserver_setNumconn(this, 0); 
-
+  sockserver_setCpumask(this, cpumask);
+  
   if (net_listen(fd) < 0) {
     VLPRINT(0, "Error: net_listen: %d:%d", fd, port);
     return;
@@ -371,17 +389,31 @@ sockserver_init(sockserver_t this, int port, int id)
 void sockserver_start(sockserver_t this, bool async)
 {
   pthread_t tid;
-  if (async) pthread_create(&tid, NULL, &sockserver_func, this);
-  else sockserver_func(this);
+  cpu_set_t cpumask = sockserver_getCpumask(this);
+  if (async) {
+    pthread_attr_t attr;
+    pthread_attr_t *attrp;
+    
+    attrp = &attr;  
+    assert(pthread_attr_init(attrp)==0);
+    assert(pthread_attr_setaffinity_np(attrp, sizeof(cpumask), &cpumask)==0);   
+    assert(pthread_create(&tid, attrp, &sockserver_func, this)==0);
+    assert(pthread_attr_destroy(attrp)==0);
+  } else {
+    // set and confirm affinity
+    tid = pthread_self();
+    assert(pthread_setaffinity_np(tid, sizeof(cpumask), &cpumask)==0);
+    sockserver_func(this);
+  }
 }
 
 sockserver_t
-sockserver_new(int port, int id) {
+sockserver_new(int port, int id, cpu_set_t cpumask) {
   sockserver_t this;
   
   this = malloc(sizeof(struct sockserver));
   assert(this);
-  sockserver_init(this, port, id);  
+  sockserver_init(this, port, id, cpumask);  
   return this;
 }
 

@@ -11,8 +11,10 @@
 #include <sys/socket.h>
 #include <sys/epoll.h>
 #include <sched.h>
-
 #include <uthash.h>
+
+#include "ssbench_types.h"
+
 #include "ext/tsclog/cacheline.h"
 #include "ext/tsclog/ntstore.h"
 #include "ext/tsclog/now.h"
@@ -22,28 +24,28 @@
 #include "msg.h"
 #include "queue.h"
 #include "sockserver.h"
-#include "opserver.h"
-
-typedef int semid_t;
+#include "funcserver.h"
 
 struct Args {
-  int          portCnt;
-  int          workCnt;
+  int          inputCnt;
+  int          outputCnt;
+  int          funcCnt;
   int          verbose;
   unsigned int totalcpus;
   unsigned int availcpus;
+  pid_t        pid;
   
   struct {
     sockserver_t     *array;
     int               arraySize;
     pthread_barrier_t barrier;
-  } socketServers;
+  } inputServers;
   
   struct {
-    opserver_t        hashtable;
+    funcserver_t        hashtable;
     int               num;
     pthread_barrier_t barrier;
-  } opServers;
+  } funcServers;
 };
 
 extern struct Args Args;
