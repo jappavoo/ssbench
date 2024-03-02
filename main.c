@@ -188,7 +188,7 @@ bool addFunc(char **argv, int argc, char *optarg)
     VLPRINT(0, "WARNING: no function associated with %s. Will use func=%p\n",
 	    path, func);
   }
-  
+
   size_t maxmsgsize;
   tmpstr = strtok_r(NULL, ",", &sptr);
   if (tmpstr == NULL) return false;
@@ -309,6 +309,7 @@ int main(int argc, char **argv)
 
   assert(Args.inputCnt == HASH_COUNT(Args.inputServers.hashtable));
   assert(Args.funcCnt == HASH_COUNT(Args.funcServers.hashtable));
+  //  assert(Args.outputCnt == HASH_COUNT(Args.outputServers.hashtable));
   
   for (i=1; i<Args.inputCnt; i++) {
     HASH_FIND_INT(Args.inputServers.hashtable, &i, ssrv);
