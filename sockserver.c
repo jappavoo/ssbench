@@ -377,7 +377,7 @@ sockserver_init(sockserver_t this, int port, int id, cpu_set_t cpumask)
     sockserver_setEpollfd(this,epollfd);
   }
   
-  if (verbose(1)) sockserver_dump(this, stderr);
+  if (verbose(2)) sockserver_dump(this, stderr);
 
 }
 
@@ -415,7 +415,7 @@ sockserver_new(int port, int id, cpu_set_t cpumask) {
 void
 sockserver_dump(sockserver_t this, FILE *file)
 {
-  fprintf(file, "this:%p id:%d tid:%ld listenFd:%d port:%d\n", this,
+  fprintf(file, "sockserver:%p id:%d tid:%ld listenFd:%d port:%d\n", this,
 	  sockserver_getId(this),
 	  sockserver_getTid(this),
 	  sockserver_getListenFd(this),

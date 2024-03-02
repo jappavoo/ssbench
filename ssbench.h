@@ -1,6 +1,9 @@
 #ifndef __SSBENCH_H__
 #define __SSBENCH_H__
 
+// required for sched.h to providle cpu macros
+#define _GNU_SOURCE
+
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -37,14 +40,12 @@ struct Args {
   pid_t        pid;
   
   struct {
-    sockserver_t     *array;
-    int               arraySize;
+    sockserver_t      hashtable;
     pthread_barrier_t barrier;
   } inputServers;
   
   struct {
-    funcserver_t        hashtable;
-    int               num;
+    funcserver_t      hashtable;
     pthread_barrier_t barrier;
   } funcServers;
 };

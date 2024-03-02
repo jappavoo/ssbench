@@ -8,29 +8,30 @@ typedef struct sockserver_msgbuffer * sockserver_msgbuffer_t;
 
 struct sockserver_msgbuffer {
   union ssbench_msghdr hdr;
-  int n;
-  queue_entry_t qe;
+  int                  n;
+  queue_entry_t        qe;
 }; 
 
 struct sockserver_connection {
-  struct sockaddr_storage addr;
-  socklen_t addrlen;
-  int fd;
-  int       msgcnt;
+  struct sockaddr_storage     addr;
+  socklen_t                   addrlen;
+  int                         fd;
+  int                         msgcnt;
+  sockserver_t                ss;
   struct sockserver_msgbuffer mbuf;
-  sockserver_t ss;
 };
 
 struct sockserver {
-  PortType  port;
-  FDType    listenFd;
-  int       epollfd;
-  int       id;
-  pthread_t tid;
-  int       numconn;
-  int       msgcnt;
-  char      name[16];
-  cpu_set_t cpumask;
+  PortType       port;
+  FDType         listenFd;
+  int            epollfd;
+  int            id;
+  pthread_t      tid;
+  int            numconn;
+  int            msgcnt;
+  char           name[16];
+  cpu_set_t      cpumask;
+  UT_hash_handle hh;
 };
 
 // public getters
