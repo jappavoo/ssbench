@@ -23,6 +23,7 @@
 #include "net.h"
 #include "msg.h"
 #include "queue.h"
+#include "func.h"
 #include "sockserver.h"
 #include "funcserver.h"
 
@@ -73,4 +74,15 @@ gettid(void)
 }
 #endif
 
+static inline void
+cpusetDump(FILE *file, cpu_set_t * cpumask)
+{
+  for (int j = 0; j < CPU_SETSIZE; j++) {
+    if (CPU_ISSET(j, cpumask)) {
+      fprintf(file, "%d ", j);
+    }
+  }
+  fprintf(file, "\n");
+}
+  
 #endif

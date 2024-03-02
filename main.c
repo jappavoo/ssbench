@@ -4,7 +4,7 @@
 #include <errno.h>
 #include <getopt.h>
 #include <sys/sysinfo.h>
-
+//012345678901234567890123456789012345678901234567890123456789012345678901234567
 static void usage(char *name)
 {
   fprintf(stderr,
@@ -37,6 +37,7 @@ static void dumpInputSrvs()
     sockserver_dump(Args.inputServers.array[i], stderr);
   }
 }
+
 
 static void dumpFuncSrvs()
 {
@@ -155,15 +156,58 @@ bool addInput(char **argv, int argc, char *optarg)
 
 bool addFunc(char **argv, int argc, char *optarg)
 {
+  char *sptr;
+  char *endptr;
+  char *tmpstr;
+  
   uint32_t id;
-  char *path;           // sscanf mallocs space for this see %ms
-  funcserver_func *func;
+  tmpstr = strtok_r(optarg, ",", &sptr);
+  if (tmpstr == NULL) return false;
+
+  errno = 0;   // as per man page notes for strtod or strtol
+  id = strtod(tmpstr, &endptr);
+  if (endptr == tmpstr || errno != 0) return false;
+  ssbench_func_t func = NULL;
+  char *path = strtok_r(NULL, ",", &sptr);
+  if (path == NULL) return false;
+  //  funcserver_func *func = loadfunc(path);
+
   size_t maxmsgsize;
+  tmpstr = strtok_r(NULL, ",", &sptr);
+  if (tmpstr == NULL) return false;
+  errno = 0;   // as per man page notes for strtod or strtol
+  maxmsgsize = strtod(tmpstr, &endptr);
+  if (endptr == tmpstr || errno != 0) return false;
+  
   size_t qlen;
+  tmpstr = strtok_r(NULL, ",", &sptr);
+  if (tmpstr == NULL) return false;
+  errno = 0;   // as per man page notes for strtod or strtol
+  qlen = strtod(tmpstr, &endptr);
+  if (endptr == tmpstr || errno != 0) return false;
+
   cpu_set_t cpumask;
-  int n;
-  n = sscanf(optarg, "%d,%ms,%lu,%lu", &id, &path, &maxmsgsize, &qlen);
-  VLPRINT(2, "%d: %04x,%s,%lu,%lu\n", n, id, path, maxmsgsize, qlen);
+  CPU_ZERO(&cpumask);
+  tmpstr = strtok_r(NULL, ",", &sptr);
+  if (tmpstr != NULL) {
+    if (!parseCPUSet(endptr, &cpumask)) {
+      fprintf(stderr, "ERROR: invalid cpu set specifiation: %s\n", optarg);
+      usage(argv[0]);
+      return false;
+    }
+  } else {
+    // if no cpu mask specified then set mask to all cpus
+    setAllcpus(Args.totalcpus, &cpumask);
+  }
+  
+  VLPRINT(2, "id:%04x,path:%s,func:%p,maxmsgsize:%lu,qlen:%lu,cpumask:",
+	  id, path, func, maxmsgsize, qlen);
+  if (verbose(2)) {
+    cpusetDump(stderr, &cpumask);
+  }
+
+  funcserver_t fsrv = funcserver_new(id, func, maxmsgsize, qlen, cpumask);
+  
   exit(-1);
 }
 
@@ -183,7 +227,12 @@ processArgs(int argc, char **argv)
   while ((opt = getopt(argc, argv, "hi:f:o:v")) != -1) {
     switch (opt) {
     case 'f':
-      if (!addFunc(argv, argc, optarg)) return false;
+      if (!addFunc(argv, argc, optarg)) {
+	fprintf(stderr, "ERROR: invalid function id value: %s (%d)\n",
+		optarg,errno);
+	usage(argv[0]);
+	return false;
+      }
       break;
     case 'h':
       usage(argv[0]);

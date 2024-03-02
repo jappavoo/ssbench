@@ -248,12 +248,7 @@ static void * sockserver_func(void * arg)
   if (verbose(1)) {
     assert(pthread_getaffinity_np(tid, sizeof(cpumask), &cpumask)==0);
     SSVP("%s", "cpuaffinity:");
-    for (int j = 0; j < CPU_SETSIZE; j++) {
-      if (CPU_ISSET(j, &cpumask)) {
-	fprintf(stderr, "%d ", j);
-      }
-    }
-    fprintf(stderr, "\n");
+    cpusetDump(stderr, &cpumask);
   }
 
   SSVP("listenConnection:%p:listenFd:%d:epollfd:%d\n",

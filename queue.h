@@ -21,4 +21,6 @@ struct queue {
 enum QueueEntryFindRC { Q_NONE = 0, Q_FULL=-1, Q_OK=1 };
 
 extern void queue_init(queue_t this, int qlen);
+extern void queue_dump(queue_t this, FILE *file);
+
 #endif
