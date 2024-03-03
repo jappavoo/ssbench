@@ -27,8 +27,9 @@
 #include "msg.h"
 #include "queue.h"
 #include "func.h"
-#include "sockserver.h"
 #include "funcserver.h"
+#include "sockserver.h"
+
 
 struct Args {
   int          inputCnt;

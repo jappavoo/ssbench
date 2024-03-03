@@ -64,15 +64,16 @@ static void msgbuf_reset(sockserver_msgbuffer_t mb)
 {
   mb->hdr.raw = 0;
   mb->n       = 0;
+  mb->fsrv    = NULL;
   mb->qe      = NULL;
 }
 
 
 static void msgbuf_dump(sockserver_msgbuffer_t mb)
 {
-  fprintf(stderr, "%p:hdr.raw:%lx (opid:%x datalen:%d) n:%d qe:%p\n",
-	  mb, mb->hdr.raw, mb->hdr.fields.opid, mb->hdr.fields.datalen,
-	  mb->n, mb->qe);
+  fprintf(stderr, "%p:hdr.raw:%lx (funcid:%x datalen:%d) n:%d fsrv:%p qe:%p\n",
+	  mb, mb->hdr.raw, mb->hdr.fields.funcid, mb->hdr.fields.datalen,
+	  mb->n, mb->fsrv, mb->qe);
 }
 
 static sockserver_connection_t
@@ -140,12 +141,28 @@ static void sockserver_cleanupConnection(sockserver_t this,
   free(co);
 }
 
-static enum QueueEntryFindRC
-sockserver_findOpServerQueueEntry(sockserver_t this, union ssbench_msghdr *h,
-				  queue_entry_t *qe)
+static QueueEntryFindRC_t
+sockserver_findFuncServerAndQueueEntry(sockserver_t this,
+				       union ssbench_msghdr *h,
+				       funcserver_t *fsrv,
+				       queue_entry_t *qe)
 {
-  *qe = NULL;
-  return Q_NONE;
+  funcserver_t tmpfsrv;
+  assert(h);
+  uint32_t fid = h->fields.funcid;
+  queue_entry_t tmpqe;
+  
+  HASH_FIND_INT(Args.funcServers.hashtable, &fid, tmpfsrv);
+
+  if (tmpfsrv == NULL) {
+    // no server found for this id
+    VLPRINT(2, "NO funcserver found for fid=%d in message.\n",fid);
+    *fsrv = NULL;
+    *qe   = NULL;
+    return Q_NONE;
+  }
+  *fsrv = tmpfsrv;
+  return  funcserver_getQueueEntry(tmpfsrv, h, qe);
 }
 
 
@@ -179,21 +196,23 @@ static void sockserver_serveConnection(sockserver_t this,
     // the data of the message to the correct operator queue
     SSVP("msghdr: opid:%x(%02hhx %02hhx %02hhx %02hhx) "
 	 "datalen:%u (%02hhx %02hhx %02hhx %02hhx)\n",
-	 comb->hdr.fields.opid, comb->hdr.buf[0],
+	 comb->hdr.fields.funcid, comb->hdr.buf[0],
 	 comb->hdr.buf[1], comb->hdr.buf[2], comb->hdr.buf[3],
 	 comb->hdr.fields.datalen, comb->hdr.buf[4],
 	 comb->hdr.buf[5], comb->hdr.buf[6], comb->hdr.buf[7]);
-    enum QueueEntryFindRC  qerc;
-    qerc=sockserver_findOpServerQueueEntry(this, &comb->hdr, &qe);
+    QueueEntryFindRC_t  qerc;
+    funcserver_t fsrv;
+    qerc=sockserver_findFuncServerAndQueueEntry(this, &comb->hdr, &fsrv, &qe);
     if (qerc == Q_NONE) {
       comb->qe = NULL;
     } else if (qerc == Q_FULL) {
+      // add code to record and signal back pressure 
       comb->qe = NULL;
     } else {
       comb->qe = qe;
     }
   }
-  // buffer data of message to the worker
+  // buffer data of message to the queue element
   qe  = comb->qe;
   assert(n>=msghdrlen);
   n -= msghdrlen;      // n = amount of message data read so far
@@ -217,9 +236,6 @@ static void sockserver_serveConnection(sockserver_t this,
   co->msgcnt++;
   // reset connection message buffer
   msgbuf_reset(comb);
-  comb->qe      = NULL;
-  comb->n       = 0;
-  comb->hdr.raw = 0;
 }
 
 #define MAX_EVENTS 1024

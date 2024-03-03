@@ -17,7 +17,7 @@ ssbench_func_t
 func_getfunc(const char *path)
 {
   func_desc_t fdesc;
-  ssbench_func_t (*getfunc)(void);
+  ssbench_func_t (*getfunc)(const char *path,int verbosity);
   
   if (path==NULL) return NULL;
   
@@ -41,7 +41,7 @@ func_getfunc(const char *path)
       dlclose(dlhdl);
       exit(EXIT_FAILURE);
     }
-    ssbench_func_t func = getfunc();
+    ssbench_func_t func = getfunc(path, Args.verbose);
     VLPRINT(2, "getfunc:%p returned %p\n", getfunc, func);
     
     fdesc = malloc(sizeof(struct func_desc));

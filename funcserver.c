@@ -64,6 +64,12 @@ funcserver_dump(funcserver_t this, FILE *file)
   queue_dump(funcserver_getQueue(this),stderr);
 }
 
+extern QueueEntryFindRC_t
+funcserver_getQueueEntry(funcserver_t this, union ssbench_msghdr *h,
+			 queue_entry_t *qe) {
+  *qe = NULL;
+  return Q_FULL;
+}
 static void
 funcserver_init(funcserver_t this, uint32_t id, const char *path,
 		ssbench_func_t func, size_t maxmsgsize, size_t qlen,

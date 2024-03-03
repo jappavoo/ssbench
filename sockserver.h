@@ -9,6 +9,7 @@ typedef struct sockserver_msgbuffer * sockserver_msgbuffer_t;
 struct sockserver_msgbuffer {
   union ssbench_msghdr hdr;
   int                  n;
+  funcserver_t         fsrv;
   queue_entry_t        qe;
 }; 
 

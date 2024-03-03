@@ -53,5 +53,8 @@ extern funcserver_t funcserver_new(uint32_t id, const char * path,
 
 // core mothods
 extern void funcserver_start();
-extern void funcserver_dump(funcserver_t this, FILE *file);  
+extern void funcserver_dump(funcserver_t this, FILE *file);
+extern QueueEntryFindRC_t funcserver_getQueueEntry(funcserver_t this,
+						   union ssbench_msghdr *h,
+						   queue_entry_t *qe);
 #endif

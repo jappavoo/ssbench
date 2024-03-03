@@ -18,7 +18,7 @@ struct queue {
   struct queue_entry  entries[];
 } __attribute__ ((aligned (CACHE_LINE_SIZE)));;
 
-enum QueueEntryFindRC { Q_NONE = 0, Q_FULL=-1, Q_OK=1 };
+typedef enum  { Q_NONE = 0, Q_FULL=-1, Q_OK=1 } QueueEntryFindRC_t;
 
 extern void queue_init(queue_t this, int qlen);
 extern void queue_dump(queue_t this, FILE *file);
