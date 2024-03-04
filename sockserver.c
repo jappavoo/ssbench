@@ -206,7 +206,9 @@ static void sockserver_serveConnection(sockserver_t this,
     if (qerc == Q_NONE) {
       comb->qe = NULL;
     } else if (qerc == Q_FULL) {
-      // add code to record and signal back pressure 
+      // add code to record and signal back pressure
+      VLPRINT(0, "func:%x Q_FULL no space to place message drain\n",
+	      funcserver_getId(fsrv));
       comb->qe = NULL;
     } else {
       comb->qe = qe;
