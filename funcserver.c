@@ -87,8 +87,7 @@ funcserver_init(funcserver_t this, uint32_t id, const char *path,
   funcserver_setFunc(this, func);
   funcserver_setCpumask(this, cpumask);
   funcserver_setSemid(this, 0);
-  queue_init(&(this->queue),qlen);
-  
+  queue_init(&(this->queue), maxmsgsize, qlen);
 }
 
 funcserver_t
