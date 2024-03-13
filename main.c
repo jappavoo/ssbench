@@ -301,18 +301,22 @@ processArgs(int argc, char **argv)
   return true;
 }
 
-void cleanup(void)
+void cleanup(int num)
 {
   sockserver_t ssrv, stmp;
   funcserver_t fsrv, ftmp;
 
-  fprintf(stderr, "cleanup\n");
+  fprintf(stderr, "cleanup %d\n", num);
   HASH_ITER(hh, Args.inputServers.hashtable, ssrv, stmp) {
     sockserver_destroy(ssrv);
+    HASH_DEL(Args.inputServers.hashtable, ssrv); 
+    free(ssrv);         
   }
   
   HASH_ITER(hh, Args.funcServers.hashtable, fsrv, ftmp) {
     funcserver_destroy(fsrv);
+    HASH_DEL(Args.funcServers.hashtable, fsrv); 
+    free(fsrv);         
   }
   
 }
