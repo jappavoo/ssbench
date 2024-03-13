@@ -7,47 +7,47 @@
 #include <errno.h>
 
 //012345678901234567890123456789012345678901234567890123456789012345678901234567
-#define SSVP(fmt,...) \
-  VPRINT("%p:%d:%lx:" fmt, this, sockserver_getId(this), \
-	 sockserver_getTid(this), __VA_ARGS__)
+#define SSVLP(VL,fmt,...)				  \
+  VLPRINT(VL,"%p:%d:%lx:" fmt, this, inputserver_getId(this),	\
+	 inputserver_getTid(this), __VA_ARGS__)
 
-static inline void sockserver_setPort(sockserver_t this, int p) {
+static inline void inputserver_setPort(inputserver_t this, int p) {
   this->port = p;
 }
 
-static inline void sockserver_setListenFd(sockserver_t this, int fd) {
+static inline void inputserver_setListenFd(inputserver_t this, int fd) {
   this->listenFd = fd;
 }
 
-static inline void sockserver_setId(sockserver_t this, int id) {
+static inline void inputserver_setId(inputserver_t this, int id) {
   this->id = id;
 }
 
-static inline void sockserver_setEpollfd(sockserver_t this, int fd) {
+static inline void inputserver_setEpollfd(inputserver_t this, int fd) {
   this->epollfd = fd;
 }
 
-static inline void sockserver_setTid(sockserver_t this, pthread_t tid) {
+static inline void inputserver_setTid(inputserver_t this, pthread_t tid) {
   this->tid = tid;
 }
 
-static inline void sockserver_setMsgcnt(sockserver_t this, int c) {
+static inline void inputserver_setMsgcnt(inputserver_t this, int c) {
   this->msgcnt = c;
 }
 
-static inline void sockserver_incMsgcnt(sockserver_t this, int c) {
+static inline void inputserver_incMsgcnt(inputserver_t this, int c) {
   this->msgcnt++;
 }
 
-static inline void sockserver_setNumconn(sockserver_t this, int n) {
+static inline void inputserver_setNumconn(inputserver_t this, int n) {
   this->numconn = n;
 }
 
-static inline void sockserver_incNumconn(sockserver_t this) {
+static inline void inputserver_incNumconn(inputserver_t this) {
   this->numconn++;
 }
 
-static inline void sockserver_setCpumask(sockserver_t this, cpu_set_t cpumask) {
+static inline void inputserver_setCpumask(inputserver_t this, cpu_set_t cpumask) {
   this->cpumask = cpumask;
 }
 
@@ -61,7 +61,7 @@ static void setnonblocking(int fd)
   flags = fcntl(fd, F_SETFD);  
 }
 
-static void msgbuf_reset(sockserver_msgbuffer_t mb)
+static void msgbuf_reset(inputserver_msgbuffer_t mb)
 {
   mb->hdr.raw = 0;
   mb->n       = 0;
@@ -70,19 +70,19 @@ static void msgbuf_reset(sockserver_msgbuffer_t mb)
 }
 
 
-static void msgbuf_dump(sockserver_msgbuffer_t mb)
+static void msgbuf_dump(inputserver_msgbuffer_t mb)
 {
   fprintf(stderr, "%p:hdr.raw:%lx (funcid:%x datalen:%d) n:%d fsrv:%p qe:%p\n",
 	  mb, mb->hdr.raw, mb->hdr.fields.funcid, mb->hdr.fields.datalen,
 	  mb->n, mb->fsrv, mb->qe);
 }
 
-static sockserver_connection_t
-sockserver_connection_new(struct sockaddr_storage addr, socklen_t addrlen,
-			  int fd, sockserver_t ss)
+static inputserver_connection_t
+inputserver_connection_new(struct sockaddr_storage addr, socklen_t addrlen,
+			  int fd, inputserver_t ss)
 {
-  	sockserver_connection_t co =
-	  malloc(sizeof(struct sockserver_connection));
+  	inputserver_connection_t co =
+	  malloc(sizeof(struct inputserver_connection));
 	co->addr         = addr;
 	co->addrlen      = addrlen;
 	co->fd           = fd;
@@ -93,7 +93,7 @@ sockserver_connection_new(struct sockaddr_storage addr, socklen_t addrlen,
 }
 
 static void
-sockserver_connection_dump(sockserver_t this, struct sockserver_connection *c) 
+inputserver_connection_dump(inputserver_t this, struct inputserver_connection *c) 
 {
   int connfd = c->fd;
   struct sockaddr *addr = (struct sockaddr *)&(c->addr);
@@ -125,13 +125,13 @@ sockserver_connection_dump(sockserver_t this, struct sockserver_connection *c)
   }
 }
 
-static void sockserver_cleanupConnection(sockserver_t this,
-					 sockserver_connection_t co)
+static void inputserver_cleanupConnection(inputserver_t this,
+					 inputserver_connection_t co)
 {
   struct epoll_event dummyev;
-  int epollfd = sockserver_getEpollfd(this);
-  SSVP("co:%p \n\t", co);
-  sockserver_connection_dump(this, co);
+  int epollfd = inputserver_getEpollfd(this);
+  SSVLP(1,"co:%p \n\t", co);
+  inputserver_connection_dump(this, co);
   if (co->mbuf.n != 0) NYI;  // connection was lost in the middle of a message
   // for backwards compatiblity we use dummy versus NULL see bugs section
   // of man epoll_ctl
@@ -144,7 +144,7 @@ static void sockserver_cleanupConnection(sockserver_t this,
 }
 
 static QueueEntryFindRC_t
-sockserver_findFuncServerAndQueueEntry(sockserver_t this,
+inputserver_findFuncServerAndQueueEntry(inputserver_t this,
 				       union ssbench_msghdr *h,
 				       funcserver_t *fsrv,
 				       queue_entry_t *qe)
@@ -168,8 +168,8 @@ sockserver_findFuncServerAndQueueEntry(sockserver_t this,
 }
 
 
-static void sockserver_serveConnection(sockserver_t this,
-				       sockserver_connection_t co)
+static void inputserver_serveConnection(inputserver_t this,
+				       inputserver_connection_t co)
 {
   // We got data on the fd our job is to buffer a message to a work
   // and then let the work processes it.  Given that a socket is a serial
@@ -182,12 +182,12 @@ static void sockserver_serveConnection(sockserver_t this,
   // buffered.  Once a message is released to a work the connections message
   // buffer needs to be reset.
   int cofd = co->fd;
-  struct sockserver_msgbuffer *comb = &co->mbuf;
+  struct inputserver_msgbuffer *comb = &co->mbuf;
   const int msghdrlen = sizeof(union ssbench_msghdr);
   int n = comb->n; 
   queue_entry_t qe;
   
-  SSVP("co:%p mb.n=%d\n",co,comb->n);
+  SSVLP(1,"co:%p mb.n=%d\n",co,comb->n);
   if ( n < msghdrlen) {
     assert(n<=msghdrlen);
     n += net_nonblocking_readn(cofd, &comb->hdr.buf[n], msghdrlen-n);
@@ -195,7 +195,7 @@ static void sockserver_serveConnection(sockserver_t this,
     if (n<msghdrlen) return; // have not received full msg hdr yet
     // We have a whole message header. Switch over to buffering
     // the data of the message to the correct operator queue
-    SSVP("msghdr: opid:%x(%02hhx %02hhx %02hhx %02hhx) "
+    SSVLP(1,"msghdr: opid:%x(%02hhx %02hhx %02hhx %02hhx) "
 	 "datalen:%u (%02hhx %02hhx %02hhx %02hhx)\n",
 	 comb->hdr.fields.funcid, comb->hdr.buf[0],
 	 comb->hdr.buf[1], comb->hdr.buf[2], comb->hdr.buf[3],
@@ -203,7 +203,7 @@ static void sockserver_serveConnection(sockserver_t this,
 	 comb->hdr.buf[5], comb->hdr.buf[6], comb->hdr.buf[7]);
     QueueEntryFindRC_t  qerc;
     funcserver_t fsrv;
-    qerc=sockserver_findFuncServerAndQueueEntry(this, &comb->hdr, &fsrv, &qe);
+    qerc=inputserver_findFuncServerAndQueueEntry(this, &comb->hdr, &fsrv, &qe);
     if (qerc == Q_NONE) {
       VLPRINT(2, "func:%p Q_NONE could not find an funcserver?\n", this); 
       comb->qe = NULL;
@@ -269,36 +269,36 @@ static void sockserver_serveConnection(sockserver_t this,
 
 #define MAX_EVENTS 1024
 // epoll code is based on example from the man page
-static void * sockserver_func(void * arg)
+static void * inputserver_func(void * arg)
 {
-  sockserver_t this = arg;
+  inputserver_t this = arg;
   // dummy connection object to use as
   // an epoll handle could have used &listenfd
   // but decided this looks better ;-)
   struct {
     int fd;
   } listenConnection = {
-    .fd =  sockserver_getListenFd(this)
+    .fd =  inputserver_getListenFd(this)
   };
-  int id = sockserver_getId(this);
-  int epollfd = sockserver_getEpollfd(this);
+  int id = inputserver_getId(this);
+  int epollfd = inputserver_getEpollfd(this);
   pthread_t tid = pthread_self();
-  char *name = sockserver_getName(this);
+  char *name = inputserver_getName(this);
   struct epoll_event ev, events[MAX_EVENTS];
   
-  sockserver_setTid(this, tid);
-  snprintf(name,sockserver_sizeofName(this),"ss%d",
-	   sockserver_getPort(this));
+  inputserver_setTid(this, tid);
+  snprintf(name,inputserver_sizeofName(this),"ss%d",
+	   inputserver_getPort(this));
   pthread_setname_np(tid, name);
   
   if (verbose(1)) {
     cpu_set_t cpumask;
     assert(pthread_getaffinity_np(tid, sizeof(cpumask), &cpumask)==0);
-    SSVP("%s", "cpuaffinity:");
+    SSVLP(1,"%s", "cpuaffinity:");
     cpusetDump(stderr, &cpumask);
   }
 
-  SSVP("listenConnection:%p:listenFd:%d:epollfd:%d\n",
+  SSVLP(1,"listenConnection:%p:listenFd:%d:epollfd:%d\n",
        &listenConnection,listenConnection.fd, epollfd);
 
   ev.events = EPOLLIN;
@@ -320,7 +320,7 @@ static void * sockserver_func(void * arg)
     
     for (int n = 0; n < nfds; ++n) {
       void * activeConnection = events[n].data.ptr;
-      SSVP("activeConnection:%p\n", activeConnection);
+      SSVLP(1,"activeConnection:%p\n", activeConnection);
       if ( activeConnection == &listenConnection ) {
 	struct sockaddr_storage addr; // in/out parameter
 	// addrlen must be initilized to size of addr in bytes.  It will be
@@ -332,14 +332,14 @@ static void * sockserver_func(void * arg)
 	  perror("accept");
 	  exit(EXIT_FAILURE);
 	}
-        SSVP("new connection:%d\n\t", connfd);
+        SSVLP(1,"new connection:%d\n\t", connfd);
 	// epoll man page recommends non-blocking io for edgetriggered use 
 	setnonblocking(connfd);
 	// create a new connection object for this connection
-	sockserver_connection_t co = sockserver_connection_new(addr, addrlen,
+	inputserver_connection_t co = inputserver_connection_new(addr, addrlen,
 							       connfd, this);
-	sockserver_incNumconn(this);
-	sockserver_connection_dump(this, co);
+	inputserver_incNumconn(this);
+	inputserver_connection_dump(this, co);
 
 	// setup event structure
 	ev.events   = EPOLLIN | EPOLLET | EPOLLHUP | EPOLLRDHUP | EPOLLERR;
@@ -350,37 +350,37 @@ static void * sockserver_func(void * arg)
 	  exit(EXIT_FAILURE);
 	}
       } else {
-	sockserver_connection_t co = activeConnection;
+	inputserver_connection_t co = activeConnection;
 	uint32_t evnts = events[n].events;
-	SSVP("activity on connection:%p: events0x%x fd:%d\n",
+	SSVLP(1,"activity on connection:%p: events0x%x fd:%d\n",
 	     co, evnts, co->fd);
 	// process each of the events that have occurred on this connection
 	if (evnts & EPOLLIN) {
-	  SSVP("co:%p fd:%d got EPOLLIN(%x) evnts:%x\n",
+	  SSVLP(1,"co:%p fd:%d got EPOLLIN(%x) evnts:%x\n",
 	       co, co->fd, EPOLLIN, evnts);
-	  sockserver_serveConnection(this, co);
+	  inputserver_serveConnection(this, co);
 	  evnts = evnts & ~EPOLLIN;
 	}
 	if (evnts & EPOLLHUP) {
-	  SSVP("co:%p fd:%d got EPOLLHUP(%x) evnts:%x\n",
+	  SSVLP(1,"co:%p fd:%d got EPOLLHUP(%x) evnts:%x\n",
 	       co, co->fd, EPOLLHUP, evnts);
 	  evnts = evnts & ~EPOLLHUP;
 	  NYI;
 	}
 	if (evnts & EPOLLRDHUP) {
-	  SSVP("connection lost: co:%p fd:%d got EPOLLRDHUP(%x) evnts:%x\n",
+	  SSVLP(1,"connection lost: co:%p fd:%d got EPOLLRDHUP(%x) evnts:%x\n",
 	       co, co->fd, EPOLLRDHUP, evnts);
 	  evnts = evnts & ~EPOLLRDHUP;
-	  sockserver_cleanupConnection(this, co);
+	  inputserver_cleanupConnection(this, co);
 	}
 	if (evnts & EPOLLERR) {
-	  SSVP("co:%p fd:%d got EPOLLERR(%x) evnts:%x",
+	  SSVLP(1,"co:%p fd:%d got EPOLLERR(%x) evnts:%x",
 	       co, co->fd, EPOLLERR, evnts);
 	  evnts = evnts & ~EPOLLERR;
 	  NYI;
 	}
 	if (evnts != 0) {
-	  SSVP("co:%p fd:%d unknown events evnts:%x",
+	  SSVLP(1,"co:%p fd:%d unknown events evnts:%x",
 	       co, co->fd, evnts);
 	  assert(evnts==0);
 	}
@@ -390,7 +390,7 @@ static void * sockserver_func(void * arg)
 }
 
 static void
-sockserver_init(sockserver_t this, int port, int id, cpu_set_t cpumask)
+inputserver_init(inputserver_t this, int port, int id, cpu_set_t cpumask)
 {
   int rc;
   int fd;
@@ -407,12 +407,12 @@ sockserver_init(sockserver_t this, int port, int id, cpu_set_t cpumask)
   // we are using epoll so we set the listen fd to non-blocking mode
   setnonblocking(fd);
   
-  sockserver_setListenFd(this, fd);
-  sockserver_setPort(this, port);
-  sockserver_setId(this, id);
-  sockserver_setMsgcnt(this, 0);
-  sockserver_setNumconn(this, 0); 
-  sockserver_setCpumask(this, cpumask);
+  inputserver_setListenFd(this, fd);
+  inputserver_setPort(this, port);
+  inputserver_setId(this, id);
+  inputserver_setMsgcnt(this, 0);
+  inputserver_setNumconn(this, 0); 
+  inputserver_setCpumask(this, cpumask);
   
   if (net_listen(fd) < 0) {
     VLPRINT(0, "Error: net_listen: %d:%d", fd, port);
@@ -421,17 +421,17 @@ sockserver_init(sockserver_t this, int port, int id, cpu_set_t cpumask)
   {
     int epollfd = epoll_create1(0);
     assert(epollfd != -1);
-    sockserver_setEpollfd(this,epollfd);
+    inputserver_setEpollfd(this,epollfd);
   }
   
-  if (verbose(2)) sockserver_dump(this, stderr);
+  if (verbose(2)) inputserver_dump(this, stderr);
 
 }
 
-void sockserver_start(sockserver_t this, bool async)
+void inputserver_start(inputserver_t this, bool async)
 {
   pthread_t tid;
-  cpu_set_t cpumask = sockserver_getCpumask(this);
+  cpu_set_t cpumask = inputserver_getCpumask(this);
   if (async) {
     pthread_attr_t attr;
     pthread_attr_t *attrp;
@@ -439,38 +439,38 @@ void sockserver_start(sockserver_t this, bool async)
     attrp = &attr;  
     assert(pthread_attr_init(attrp)==0);
     assert(pthread_attr_setaffinity_np(attrp, sizeof(cpumask), &cpumask)==0);   
-    assert(pthread_create(&tid, attrp, &sockserver_func, this)==0);
+    assert(pthread_create(&tid, attrp, &inputserver_func, this)==0);
     assert(pthread_attr_destroy(attrp)==0);
   } else {
     // set and confirm affinity
     tid = pthread_self();
     assert(pthread_setaffinity_np(tid, sizeof(cpumask), &cpumask)==0);
-    sockserver_func(this);
+    inputserver_func(this);
   }
 }
 
-sockserver_t
-sockserver_new(int port, int id, cpu_set_t cpumask) {
-  sockserver_t this;
+inputserver_t
+inputserver_new(int port, int id, cpu_set_t cpumask) {
+  inputserver_t this;
   
-  this = malloc(sizeof(struct sockserver));
+  this = malloc(sizeof(struct inputserver));
   assert(this);
-  sockserver_init(this, port, id, cpumask);  
+  inputserver_init(this, port, id, cpumask);  
   return this;
 }
 
 void
-sockserver_dump(sockserver_t this, FILE *file)
+inputserver_dump(inputserver_t this, FILE *file)
 {
-  fprintf(file, "sockserver:%p id:%d tid:%ld listenFd:%d port:%d\n", this,
-	  sockserver_getId(this),
-	  sockserver_getTid(this),
-	  sockserver_getListenFd(this),
-	  sockserver_getPort(this));
+  fprintf(file, "inputserver:%p id:%d tid:%ld listenFd:%d port:%d\n", this,
+	  inputserver_getId(this),
+	  inputserver_getTid(this),
+	  inputserver_getListenFd(this),
+	  inputserver_getPort(this));
 }
 
 extern void
-sockserver_destroy(sockserver_t this)
+inputserver_destroy(inputserver_t this)
 {
-  SSVP("%s", "called\n");
+  SSVLP(1,"%s", "called\n");
 }

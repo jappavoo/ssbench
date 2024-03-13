@@ -28,7 +28,7 @@
 #include "queue.h"
 #include "func.h"
 #include "funcserver.h"
-#include "sockserver.h"
+#include "inputserver.h"
 
 
 struct Args {
@@ -41,7 +41,7 @@ struct Args {
   pid_t        pid;
   
   struct {
-    sockserver_t      hashtable;
+    inputserver_t     hashtable;
     pthread_barrier_t barrier;
   } inputServers;
   
