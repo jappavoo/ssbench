@@ -306,7 +306,7 @@ void cleanup(int num)
   sockserver_t ssrv, stmp;
   funcserver_t fsrv, ftmp;
 
-  fprintf(stderr, "cleanup %d\n", num);
+  VLPRINT(1, "cleanup %d\n", num);
   HASH_ITER(hh, Args.inputServers.hashtable, ssrv, stmp) {
     sockserver_destroy(ssrv);
     HASH_DEL(Args.inputServers.hashtable, ssrv); 
