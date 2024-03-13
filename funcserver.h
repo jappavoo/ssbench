@@ -69,4 +69,6 @@ extern QueueEntryFindRC_t funcserver_getQueueEntry(funcserver_t this,
 extern void funcserver_putBackQueueEntry(funcserver_t this, queue_entry_t *qe);
 
 extern void funcserver_start(funcserver_t this, bool async);
+extern void funcserver_destroy(funcserver_t this);
+
 #endif

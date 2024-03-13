@@ -468,3 +468,9 @@ sockserver_dump(sockserver_t this, FILE *file)
 	  sockserver_getListenFd(this),
 	  sockserver_getPort(this));
 }
+
+extern void
+sockserver_destroy(sockserver_t this)
+{
+  SSVP("%s", "called\n");
+}

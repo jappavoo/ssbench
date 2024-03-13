@@ -4,6 +4,8 @@
 #include <errno.h>
 #include <getopt.h>
 #include <sys/sysinfo.h>
+#include <signal.h>
+
 //012345678901234567890123456789012345678901234567890123456789012345678901234567
 static void usage(char *name)
 {
@@ -299,6 +301,27 @@ processArgs(int argc, char **argv)
   return true;
 }
 
+void cleanup(void)
+{
+  sockserver_t ssrv, stmp;
+  funcserver_t fsrv, ftmp;
+
+  fprintf(stderr, "cleanup\n");
+  HASH_ITER(hh, Args.inputServers.hashtable, ssrv, stmp) {
+    sockserver_destroy(ssrv);
+  }
+  
+  HASH_ITER(hh, Args.funcServers.hashtable, fsrv, ftmp) {
+    funcserver_destroy(fsrv);
+  }
+  
+}
+
+void signalHandler(void)
+{
+  exit(0);
+}
+
 int main(int argc, char **argv)
 {
   sockserver_t ssrv;
@@ -311,6 +334,10 @@ int main(int argc, char **argv)
   assert(Args.funcCnt == HASH_COUNT(Args.funcServers.hashtable));
   //  assert(Args.outputCnt == HASH_COUNT(Args.outputServers.hashtable));
 
+  atexit(cleanup);
+  signal(SIGTERM, cleanup);
+  signal(SIGINT, cleanup);
+  
   HASH_ITER(hh, Args.funcServers.hashtable, fsrv, tmp) {
     funcserver_start(fsrv,
 		     true //asunc

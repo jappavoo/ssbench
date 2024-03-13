@@ -76,6 +76,6 @@ extern sockserver_t sockserver_new(int port, int id, cpu_set_t mask);
 // core methods
 extern void sockserver_dump(sockserver_t this, FILE *file);
 extern void sockserver_start(sockserver_t this, bool async);
-
+extern void sockserver_destroy(sockserver_t this);
 
 #endif

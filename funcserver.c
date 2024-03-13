@@ -115,7 +115,7 @@ funcserver_init(funcserver_t this, uint32_t id, const char *path,
   funcserver_setPath(this, path);
   funcserver_setFunc(this, func);
   funcserver_setCpumask(this, cpumask);
-  funcserver_setSemid(this, 0);
+  funcserver_setSemid(this, -1);
   queue_init(&(this->queue), maxmsgsize, qlen);
 }
 
@@ -207,5 +207,19 @@ void funcserver_start(funcserver_t this, bool async)
     tid = pthread_self();
     assert(pthread_setaffinity_np(tid, sizeof(cpumask), &cpumask)==0);
     funcserver_func(this);
+  }
+}
+
+extern void
+funcserver_destroy(funcserver_t this)
+{
+  // FIXME: cleanup properly
+  int semid = funcserver_getSemid(this);
+
+  FSVLP(1, "%s", "called\n");
+  
+  if (semid!=-1) {
+    int rc = semctl(semid, 0, IPC_RMID);
+    if (rc != 0) perror("IPC_RMID");
   }
 }
