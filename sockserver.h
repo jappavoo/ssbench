@@ -27,11 +27,11 @@ struct sockserver {
   FDType         listenFd;
   int            epollfd;
   int            id;
-  pthread_t      tid;
   int            numconn;
   int            msgcnt;
-  char           name[16];
+  pthread_t      tid;
   cpu_set_t      cpumask;
+  char           name[16];
   UT_hash_handle hh;
 };
 
@@ -60,6 +60,15 @@ static inline int sockserver_getMsgcnt(sockserver_t this) {
 static inline cpu_set_t sockserver_getCpumask(sockserver_t this)
 {
   return this->cpumask;
+}
+static inline char * sockserver_getName(sockserver_t this)
+{
+  return this->name;
+}
+
+static inline unsigned int sockserver_sizeofName(sockserver_t this)
+{
+  return sizeof(this->name);
 }
 // new operator 
 extern sockserver_t sockserver_new(int port, int id, cpu_set_t mask);

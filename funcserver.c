@@ -1,6 +1,18 @@
 #define _GNU_SOURCE
 #include "ssbench.h"
+#include <sys/ipc.h>
+#include <sys/sem.h>
+#include <fcntl.h>
+
 //012345678901234567890123456789012345678901234567890123456789012345678901234567
+
+// counting semaphore operations wait and signal
+struct sembuf semwait = { 0, -1, 0};
+struct sembuf semsignal = { 0, 1, 0};
+
+#define FSVLP(VL,fmt,...)				  \
+  VLPRINT(VL,"%p:%d:%lx:" fmt, this, funcserver_getId(this),	\
+	 funcserver_getTid(this), __VA_ARGS__)
 
 static inline void funcserver_setId(funcserver_t this, uint32_t id)
 {
@@ -60,7 +72,8 @@ funcserver_dump(funcserver_t this, FILE *file)
   } else {
     fprintf(file, "%s) cpumask:", path);
   }
-  cpusetDump(stderr, funcserver_getCpumask(this));
+  cpu_set_t mask=funcserver_getCpumask(this);
+  cpusetDump(stderr, &mask);
   queue_dump(funcserver_getQueue(this),stderr);
 }
 
@@ -69,11 +82,27 @@ funcserver_getQueueEntry(funcserver_t this,
 			 union ssbench_msghdr *h,
 			 queue_entry_t *qe)
 {
-  
-  *qe = NULL;
-  return Q_FULL;
+  queue_t q  = funcserver_getQueue(this);
+  size_t len = h->fields.datalen;
+
+  return queue_getEmptyEntry(q, len, qe);
 }
 
+extern void
+funcserver_putBackQueueEntry(funcserver_t this,
+			     queue_entry_t *qe)
+{
+  queue_t q = funcserver_getQueue(this);
+  int semid = funcserver_getSemid(this);
+  queue_putBackFullEntry(q, *qe);
+  *qe = NULL;
+  int rc = semop(semid, &semsignal, 1);
+  if (rc<0) {
+    perror("semop:");
+    exit(-1);
+  }
+}
+    
 static void
 funcserver_init(funcserver_t this, uint32_t id, const char *path,
 		ssbench_func_t func, size_t maxmsgsize, size_t qlen,
@@ -104,4 +133,79 @@ funcserver_new(uint32_t id, const char *path, ssbench_func_t func,
   funcserver_init(this, id, path, func, maxmsgsize, qlen, cpumask);
   if (verbose(2)) funcserver_dump(this, stderr);
   return this;
+}
+
+static void * funcserver_func(void * arg)
+{
+  funcserver_t this = arg;
+  int id = funcserver_getId(this);
+  pthread_t tid = pthread_self();
+  char *name = funcserver_getName(this);
+  unsigned int nsize = funcserver_sizeofName(this);
+  const char *path= funcserver_getPath(this);
+  queue_t q  = funcserver_getQueue(this);
+  ssbench_func_t func = funcserver_getFunc(this);
+  queue_entry_t qe;
+  
+  
+  funcserver_setTid(this, tid);
+  snprintf(name,nsize,"fs%08x%.*s",id,nsize-10,path);
+  pthread_setname_np(tid, name);
+
+  int semid = semget(IPC_PRIVATE, 1, S_IRUSR|S_IWUSR);  
+  if (semid < 0) {
+    perror("semget:");
+    assert(0);
+  }
+  funcserver_setSemid(this, semid);
+  
+  /* initlize the semaphore (#0 in the set) count to 0 Simulate a mutex */
+  assert(semctl(semid, 0, SETVAL, (int)0)==0);
+
+  if (verbose(1)) {
+    funcserver_dump(this,stderr);
+    cpu_set_t cpumask;
+    assert(pthread_getaffinity_np(tid, sizeof(cpumask), &cpumask)==0);
+    FSVLP(1,"%s", "cpuaffinity:");
+    cpusetDump(stderr, &cpumask);
+  }
+  FSVLP(1,"%s", "started\n");
+  pthread_barrier_wait(&(Args.funcServers.barrier));
+
+  for (;;) {
+    int rc = semop(semid, &semwait, 1);
+    if (rc<0) {
+      perror("semop:");
+      exit(-1);
+    }
+    FSVLP(2, "%s", "AWAKE\n");
+    // grab a full entry -- must exist if semaphore was signaled
+    queue_getFullEntry(q, &qe);
+    assert(qe);
+    // invoke the function on the input data and pass output buffer NYI
+    func(qe->data, qe->len, NULL, 0, this);
+    // function done so we can put entry back on empty list
+    queue_putBackEmptyEntry(q, qe);
+  }
+  
+}
+void funcserver_start(funcserver_t this, bool async)
+{
+  pthread_t tid;
+  cpu_set_t cpumask = funcserver_getCpumask(this);
+  if (async) {
+    pthread_attr_t attr;
+    pthread_attr_t *attrp;
+    
+    attrp = &attr;  
+    assert(pthread_attr_init(attrp)==0);
+    assert(pthread_attr_setaffinity_np(attrp, sizeof(cpumask), &cpumask)==0);   
+    assert(pthread_create(&tid, attrp, &funcserver_func, this)==0);
+    assert(pthread_attr_destroy(attrp)==0);
+  } else {
+    // set and confirm affinity
+    tid = pthread_self();
+    assert(pthread_setaffinity_np(tid, sizeof(cpumask), &cpumask)==0);
+    funcserver_func(this);
+  }
 }

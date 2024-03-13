@@ -41,7 +41,7 @@ extern void queue_init(queue_t this, size_t maxentrysize, size_t qlen)
 
   // initialize busy list
   this->full = NULL;
-  if (verbose(0)) {
+  if (verbose(2)) {
     queue_dump(this, stderr);
   }
 }

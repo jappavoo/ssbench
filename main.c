@@ -302,7 +302,7 @@ processArgs(int argc, char **argv)
 int main(int argc, char **argv)
 {
   sockserver_t ssrv;
-  funcserver_t fsrv;
+  funcserver_t fsrv, tmp;
   int i;
   
   if (!processArgs(argc,argv)) return -1;
@@ -310,7 +310,13 @@ int main(int argc, char **argv)
   assert(Args.inputCnt == HASH_COUNT(Args.inputServers.hashtable));
   assert(Args.funcCnt == HASH_COUNT(Args.funcServers.hashtable));
   //  assert(Args.outputCnt == HASH_COUNT(Args.outputServers.hashtable));
-  
+
+  HASH_ITER(hh, Args.funcServers.hashtable, fsrv, tmp) {
+    funcserver_start(fsrv,
+		     true //asunc
+		     );
+  }
+
   for (i=1; i<Args.inputCnt; i++) {
     HASH_FIND_INT(Args.inputServers.hashtable, &i, ssrv);
     assert(ssrv!=NULL);

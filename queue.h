@@ -109,6 +109,7 @@ static bool queue_putBackFullEntry(queue_t this, queue_entry_t qe)
 static bool queue_putBackEmptyEntry(queue_t this, queue_entry_t qe)
 {
   void * volatile *empty_ptr = (void * volatile *)&(this->empty);
+  qe->len = 0;
   
  retry:
   queue_entry_t qe_head = this->empty;

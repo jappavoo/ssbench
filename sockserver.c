@@ -8,7 +8,8 @@
 
 //012345678901234567890123456789012345678901234567890123456789012345678901234567
 #define SSVP(fmt,...) \
-  VPRINT("%p:%d:%lx:" fmt, this, this->id, this->tid, __VA_ARGS__)
+  VPRINT("%p:%d:%lx:" fmt, this, sockserver_getId(this), \
+	 sockserver_getTid(this), __VA_ARGS__)
 
 static inline void sockserver_setPort(sockserver_t this, int p) {
   this->port = p;
@@ -128,12 +129,13 @@ static void sockserver_cleanupConnection(sockserver_t this,
 					 sockserver_connection_t co)
 {
   struct epoll_event dummyev;
+  int epollfd = sockserver_getEpollfd(this);
   SSVP("co:%p \n\t", co);
   sockserver_connection_dump(this, co);
   if (co->mbuf.n != 0) NYI;  // connection was lost in the middle of a message
   // for backwards compatiblity we use dummy versus NULL see bugs section
   // of man epoll_ctl
-  if (epoll_ctl(this->epollfd, EPOLL_CTL_DEL, co->fd, &dummyev) == -1) {
+  if (epoll_ctl(epollfd, EPOLL_CTL_DEL, co->fd, &dummyev) == -1) {
     perror("epoll_ctl: EPOLL_CTL_DEL fd");
     exit(EXIT_FAILURE);
   }
@@ -184,7 +186,6 @@ static void sockserver_serveConnection(sockserver_t this,
   const int msghdrlen = sizeof(union ssbench_msghdr);
   int n = comb->n; 
   queue_entry_t qe;
-  char *buf;
   
   SSVP("co:%p mb.n=%d\n",co,comb->n);
   if ( n < msghdrlen) {
@@ -204,6 +205,10 @@ static void sockserver_serveConnection(sockserver_t this,
     funcserver_t fsrv;
     qerc=sockserver_findFuncServerAndQueueEntry(this, &comb->hdr, &fsrv, &qe);
     if (qerc == Q_NONE) {
+      VLPRINT(2, "func:%p Q_NONE could not find an funcserver?\n", this); 
+      comb->qe = NULL;
+    } else if (qerc == Q_MSG2BIG) {
+      VLPRINT(0, "func:%p QMSG2BIG\n", this);
       comb->qe = NULL;
     } else if (qerc == Q_FULL) {
       // add code to record and signal back pressure
@@ -211,7 +216,8 @@ static void sockserver_serveConnection(sockserver_t this,
 	      funcserver_getId(fsrv));
       comb->qe = NULL;
     } else {
-      comb->qe = qe;
+      comb->qe   = qe;
+      comb->fsrv = fsrv;
     }
   }
   // buffer data of message to the queue element
@@ -219,21 +225,42 @@ static void sockserver_serveConnection(sockserver_t this,
   assert(n>=msghdrlen);
   n -= msghdrlen;      // n = amount of message data read so far
   const int len = comb->hdr.fields.datalen;
+  assert(n<=len);
   if (qe == NULL) {
-    assert(n<=len);
-    char buf[len-n];
+    char tmpbuf[len-n];
     // got a message for a worker we can't identify so we simply
     // drain the rest of the message from the connection and
     // toss it away
-    n += net_nonblocking_readn(cofd, buf, len-n);
-    if (verbose(1)) {
-      hexdump(stderr, buf, n);
+    int tmpn = net_nonblocking_readn(cofd, tmpbuf, len-n);
+    if (verbose(2)) {
+      VLPRINT(2, "ignoring: %d bytes\n",tmpn);
+      hexdump(stderr, tmpbuf, tmpn); 
     }
-    if (n<len) return; // have not received all the message data yet
+    n += tmpn;
   } else {
-    NYI;
+    // sizes should all have been validated already
+    char *buf = qe->data;
+    n += net_nonblocking_readn(cofd, buf, len-n);
   }
+  comb->n = msghdrlen + n; // record how much data we have read in total
+  if (n<len) return; // have not recieved all the message data yet
+    
   // message has been received then release to worker
+  if (qe != NULL) {
+    funcserver_t fsrv = comb->fsrv;
+    assert(fsrv);
+    qe->len = comb->n - msghdrlen;
+    assert(qe->len == len);
+    if (verbose(2)) {
+      VLPRINT(2, "Got msg for fsrv:%p id:%x\n", fsrv, funcserver_getId(fsrv));
+      hexdump(stderr, qe->data, qe->len);
+    }
+    funcserver_putBackQueueEntry(fsrv, &qe);
+  } else {
+    if (verbose(2)) {
+      VLPRINT(2,"%s", "Message skipped\n")
+    }
+  }
 
   co->msgcnt++;
   // reset connection message buffer
@@ -256,14 +283,16 @@ static void * sockserver_func(void * arg)
   int id = sockserver_getId(this);
   int epollfd = sockserver_getEpollfd(this);
   pthread_t tid = pthread_self();
-  cpu_set_t cpumask = sockserver_getCpumask(this);
+  char *name = sockserver_getName(this);
   struct epoll_event ev, events[MAX_EVENTS];
   
   sockserver_setTid(this, tid);
-  snprintf(this->name,sizeof(this->name),"ss%d", this->port);
-  pthread_setname_np(tid, this->name);
+  snprintf(name,sockserver_sizeofName(this),"ss%d",
+	   sockserver_getPort(this));
+  pthread_setname_np(tid, name);
   
   if (verbose(1)) {
+    cpu_set_t cpumask;
     assert(pthread_getaffinity_np(tid, sizeof(cpumask), &cpumask)==0);
     SSVP("%s", "cpuaffinity:");
     cpusetDump(stderr, &cpumask);

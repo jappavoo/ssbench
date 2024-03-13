@@ -2,12 +2,24 @@
 #include <stdint.h>
 #include <unistd.h>
 #include <assert.h>
+#include <string.h>
+#include <pthread.h>
 
-void * stdout_write(uint8_t *data_in, size_t n_in,
-		    uint8_t *data_out, size_t n_out,
-		    void *ssbench_ctxt)
+#define DEFAULT_SLEEP 20
+
+void * func_sleep(uint8_t *data_in, size_t n_in,
+		  uint8_t *data_out, size_t n_out,
+		  void *ssbench_ctxt)
 {
-  write(STDOUT_FILENO, data_in, n_in);
+  char buf[n_in+1];
+  int n;
+  memcpy(buf,data_in,n_in);
+  buf[n_in+1]=0;
+  
+  if (sscanf(buf, "%d", &n)!=1) n=DEFAULT_SLEEP;
+  fprintf(stderr, "%ld, sleeping for %d\n", pthread_self(), n);
+  sleep(n);
+  fprintf(stderr, "%ld, done.\n", pthread_self());
   return NULL;
 }
 
@@ -17,11 +29,5 @@ void * stdout_write(uint8_t *data_in, size_t n_in,
 // it must return the ssbench func you want to a funcserver thread
 // to invoke with the data of a message
 void *  get_ssbench_func(const char *path, int verbosity) {
-  if (verbosity>1) {
-    assert(path);
-    fprintf(stderr, "%s:%s:%d:returning func stdout_write=%p\n",
-	    path, __func__, __LINE__, stdout_write);
-  }
-  // the simple version would just be this loine
-  return  stdout_write;
+  return  func_sleep;
 }
