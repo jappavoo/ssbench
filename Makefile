@@ -1,4 +1,4 @@
-SRCS := main.c inputserver.c queue.c funcserver.c func.c net.c hexdump.c
+SRCS := main.c inputserver.c outputserver.c queue.c funcserver.c func.c net.c hexdump.c misc.c
 OBJS := $(SRCS:%.c=%.o) ext/tsclog/tsclog.o
 FUNCSRCS := stdout.c sleep.c
 FUNCSOS := $(FUNCSRCS:%.c=%.so) 

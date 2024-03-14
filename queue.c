@@ -13,7 +13,7 @@ queue_entry_t queue_next(queue_t this, queue_entry_t qe)
 extern void queue_init(queue_t this, size_t maxentrysize, size_t qlen)
 {
   this->maxentrysize = maxentrysize;
-  assert(qlen > 0);
+  ASSERT(qlen > 0);
   this->qlen = qlen;
 
   // initialize free list  

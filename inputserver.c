@@ -47,18 +47,9 @@ static inline void inputserver_incNumconn(inputserver_t this) {
   this->numconn++;
 }
 
-static inline void inputserver_setCpumask(inputserver_t this, cpu_set_t cpumask) {
-  this->cpumask = cpumask;
-}
-
-static void setnonblocking(int fd)
+static inline void inputserver_setCpumask(inputserver_t this, cpu_set_t cpumask)
 {
-  int flags;
-  
-  flags = fcntl(fd, F_GETFD);
-  assert(flags!=-1);
-  flags |= O_NONBLOCK;
-  flags = fcntl(fd, F_SETFD);  
+  this->cpumask = cpumask;
 }
 
 static void msgbuf_reset(inputserver_msgbuffer_t mb)
@@ -150,7 +141,7 @@ inputserver_findFuncServerAndQueueEntry(inputserver_t this,
 				       queue_entry_t *qe)
 {
   funcserver_t tmpfsrv;
-  assert(h);
+  ASSERT(h);
   uint32_t fid = h->fields.funcid;
   queue_entry_t tmpqe;
   
@@ -189,7 +180,7 @@ static void inputserver_serveConnection(inputserver_t this,
   
   SSVLP(1,"co:%p mb.n=%d\n",co,comb->n);
   if ( n < msghdrlen) {
-    assert(n<=msghdrlen);
+    ASSERT(n<=msghdrlen);
     n += net_nonblocking_readn(cofd, &comb->hdr.buf[n], msghdrlen-n);
     comb->n = n;
     if (n<msghdrlen) return; // have not received full msg hdr yet
@@ -222,10 +213,10 @@ static void inputserver_serveConnection(inputserver_t this,
   }
   // buffer data of message to the queue element
   qe  = comb->qe;
-  assert(n>=msghdrlen);
+  ASSERT(n>=msghdrlen);
   n -= msghdrlen;      // n = amount of message data read so far
   const int len = comb->hdr.fields.datalen;
-  assert(n<=len);
+  ASSERT(n<=len);
   if (qe == NULL) {
     char tmpbuf[len-n];
     // got a message for a worker we can't identify so we simply
@@ -248,9 +239,9 @@ static void inputserver_serveConnection(inputserver_t this,
   // message has been received then release to worker
   if (qe != NULL) {
     funcserver_t fsrv = comb->fsrv;
-    assert(fsrv);
+    ASSERT(fsrv);
     qe->len = comb->n - msghdrlen;
-    assert(qe->len == len);
+    ASSERT(qe->len == len);
     if (verbose(2)) {
       VLPRINT(2, "Got msg for fsrv:%p id:%x\n", fsrv, funcserver_getId(fsrv));
       hexdump(stderr, qe->data, qe->len);
@@ -269,7 +260,7 @@ static void inputserver_serveConnection(inputserver_t this,
 
 #define MAX_EVENTS 1024
 // epoll code is based on example from the man page
-static void * inputserver_func(void * arg)
+static void * inputserver_thread_loop(void * arg)
 {
   inputserver_t this = arg;
   // dummy connection object to use as
@@ -287,13 +278,14 @@ static void * inputserver_func(void * arg)
   struct epoll_event ev, events[MAX_EVENTS];
   
   inputserver_setTid(this, tid);
-  snprintf(name,inputserver_sizeofName(this),"ss%d",
+  snprintf(name,inputserver_sizeofName(this),"is%d",
 	   inputserver_getPort(this));
   pthread_setname_np(tid, name);
   
   if (verbose(1)) {
     cpu_set_t cpumask;
-    assert(pthread_getaffinity_np(tid, sizeof(cpumask), &cpumask)==0);
+    int rc = pthread_getaffinity_np(tid, sizeof(cpumask), &cpumask);
+    ASSERT(rc==0);
     SSVLP(1,"%s", "cpuaffinity:");
     cpusetDump(stderr, &cpumask);
   }
@@ -334,7 +326,7 @@ static void * inputserver_func(void * arg)
 	}
         SSVLP(1,"new connection:%d\n\t", connfd);
 	// epoll man page recommends non-blocking io for edgetriggered use 
-	setnonblocking(connfd);
+	net_setnonblocking(connfd);
 	// create a new connection object for this connection
 	inputserver_connection_t co = inputserver_connection_new(addr, addrlen,
 							       connfd, this);
@@ -382,7 +374,7 @@ static void * inputserver_func(void * arg)
 	if (evnts != 0) {
 	  SSVLP(1,"co:%p fd:%d unknown events evnts:%x",
 	       co, co->fd, evnts);
-	  assert(evnts==0);
+	  ASSERT(evnts==0);
 	}
       }
     }		   
@@ -405,7 +397,7 @@ inputserver_init(inputserver_t this, int port, int id, cpu_set_t cpumask)
   }
 
   // we are using epoll so we set the listen fd to non-blocking mode
-  setnonblocking(fd);
+  net_setnonblocking(fd);
   
   inputserver_setListenFd(this, fd);
   inputserver_setPort(this, port);
@@ -420,7 +412,7 @@ inputserver_init(inputserver_t this, int port, int id, cpu_set_t cpumask)
   }
   {
     int epollfd = epoll_create1(0);
-    assert(epollfd != -1);
+    ASSERT(epollfd != -1);
     inputserver_setEpollfd(this,epollfd);
   }
   
@@ -428,24 +420,33 @@ inputserver_init(inputserver_t this, int port, int id, cpu_set_t cpumask)
 
 }
 
-void inputserver_start(inputserver_t this, bool async)
+extern void
+inputserver_start(inputserver_t this, bool async)
 {
   pthread_t tid;
+  int rc;
   cpu_set_t cpumask = inputserver_getCpumask(this);
+  
   if (async) {
     pthread_attr_t attr;
     pthread_attr_t *attrp;
     
-    attrp = &attr;  
-    assert(pthread_attr_init(attrp)==0);
-    assert(pthread_attr_setaffinity_np(attrp, sizeof(cpumask), &cpumask)==0);   
-    assert(pthread_create(&tid, attrp, &inputserver_func, this)==0);
-    assert(pthread_attr_destroy(attrp)==0);
+    attrp = &attr;
+    rc = pthread_attr_init(attrp);
+    ASSERT(rc==0);
+    rc = pthread_attr_setaffinity_np(attrp, sizeof(cpumask), &cpumask);
+    ASSERT(rc==0);
+    // start thread loop
+    rc = pthread_create(&tid, attrp, &inputserver_thread_loop, this);
+    ASSERT(rc==0);
+    rc = pthread_attr_destroy(attrp);
+    ASSERT(rc==0);
   } else {
     // set and confirm affinity
     tid = pthread_self();
-    assert(pthread_setaffinity_np(tid, sizeof(cpumask), &cpumask)==0);
-    inputserver_func(this);
+    rc = pthread_setaffinity_np(tid, sizeof(cpumask), &cpumask);
+    ASSERT(rc==0);
+    inputserver_thread_loop(this);
   }
 }
 
@@ -454,7 +455,7 @@ inputserver_new(int port, int id, cpu_set_t cpumask) {
   inputserver_t this;
   
   this = malloc(sizeof(struct inputserver));
-  assert(this);
+  ASSERT(this);
   inputserver_init(this, port, id, cpumask);  
   return this;
 }

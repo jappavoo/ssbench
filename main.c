@@ -28,12 +28,19 @@ struct Args Args = {
   .availcpus               = 0,
   .pid                     = 0,
   .inputServers.hashtable  = NULL,
+  .outputServers.hashtable = NULL,
   .funcServers.hashtable   = NULL
-  
 };
 
 static void dumpOutputSrvs()
-{	  
+{
+  inputserver_t osrv, tmp;
+
+  fprintf(stderr, "Args.outputServers.hashtable:\n");
+  HASH_ITER(hh, Args.inputServers.hashtable, osrv, tmp) {
+    inputserver_dump(osrv, stderr);
+  }
+
 }
 
 static void dumpInputSrvs()
@@ -61,13 +68,14 @@ static void dumpArgs()
 {
   fprintf(stderr, "Args.pid=%d Args.totalcpus=%u, Args.availcpus=%u\n"
 	  "Args.inputCnt=%d Args.outputCnt=%d Args.funcCnt=%d\n"
-	  "Args.ssvrs=%p, Args.fsvrs=%p\n"
+	  "Args.isvrs=%p, Args.osrvrs=%p Args.fsvrs=%p\n"
 	  "Args.verbose=%d\n",
 	  Args.pid, Args.totalcpus, Args.availcpus,
 	  Args.inputCnt,
 	  Args.outputCnt,
 	  Args.funcCnt,
 	  Args.inputServers.hashtable,
+	  Args.outputServers.hashtable,
 	  Args.funcServers.hashtable,
 	  Args.verbose);
   dumpInputSrvs();
@@ -114,11 +122,6 @@ setAllcpus(int max, cpu_set_t *mask) {
   }
 }
 
-bool addOutput(char **argv, int argc, char *optarg)
-{
-  NYI;
-  return false;
-}
 
 bool addInput(char **argv, int argc, char *optarg)
 {
@@ -158,6 +161,83 @@ bool addInput(char **argv, int argc, char *optarg)
   isrv = inputserver_new(port,id,cpumask);
   HASH_ADD_INT(Args.inputServers.hashtable, id, isrv);   
   Args.inputCnt++;
+  return true;
+}
+
+bool addOutput(char **argv, int argc, char *optarg)
+{
+  char *sptr;
+  char *endptr;
+  char *tmpstr;
+  outputserver_t osrv;
+  int rc;
+  
+  uint32_t id;
+  tmpstr = strtok_r(optarg, ",", &sptr);
+  if (tmpstr == NULL) return false;
+  errno = 0;   // as per man page notes for strtod or strtol
+  id = strtod(tmpstr, &endptr);
+  if (endptr == tmpstr || errno != 0) return false;
+  /* id already in the hash? */
+  HASH_FIND_INT(Args.outputServers.hashtable, &id, osrv); 
+  if (osrv != NULL) {
+    VLPRINT(0, "ERROR: %08x already defined as a output id\n", id);
+    outputserver_dump(osrv,stderr);
+    return false;
+  }
+
+  char *host = strtok_r(NULL, ":", &sptr);
+  if (host == NULL) return false;
+  int port;
+  tmpstr = strtok_r(NULL, ",", &sptr);
+  if (tmpstr == NULL) return false;
+  errno = 0;   // as per man page notes for strtod or strtol
+  port = strtod(tmpstr, &endptr);
+  if (endptr == tmpstr || errno != 0) return false;
+  int ofd;
+  rc = net_setup_connection(&ofd, host, port);
+  if (rc != 1 ) {
+    EPRINT("ERROR:failed to create output connection to %s:%d\n", host, port);
+    exit(-1);
+  }
+  
+  size_t maxmsgsize;
+  tmpstr = strtok_r(NULL, ",", &sptr);
+  if (tmpstr == NULL) return false;
+  errno = 0;   // as per man page notes for strtod or strtol
+  maxmsgsize = strtod(tmpstr, &endptr);
+  if (endptr == tmpstr || errno != 0) return false;
+  
+  size_t qlen;
+  tmpstr = strtok_r(NULL, ",", &sptr);
+  if (tmpstr == NULL) return false;
+  errno = 0;   // as per man page notes for strtod or strtol
+  qlen = strtod(tmpstr, &endptr);
+  if (endptr == tmpstr || errno != 0) return false;
+
+  cpu_set_t cpumask;
+  CPU_ZERO(&cpumask);
+  tmpstr = strtok_r(NULL, ",", &sptr);
+  if (tmpstr != NULL) {
+    if (!parseCPUSet(endptr, &cpumask)) {
+      fprintf(stderr, "ERROR: invalid cpu set specifiation: %s\n", optarg);
+      usage(argv[0]);
+      return false;
+    }
+  } else {
+    // if no cpu mask specified then set mask to all cpus
+    setAllcpus(Args.totalcpus, &cpumask);
+  }
+  
+  VLPRINT(2, "id:%04x,host:%s,port:%d,ofd:%d,maxmsgsize:%lu,qlen:%lu,cpumask:",
+	  id, host, port, ofd,  maxmsgsize, qlen);
+  if (verbose(2)) {
+    cpusetDump(stderr, &cpumask);
+  }
+
+  osrv = outputserver_new(id, host, port, ofd, maxmsgsize, qlen, cpumask);
+  HASH_ADD_INT(Args.outputServers.hashtable, id, osrv); 
+  Args.outputCnt++;
   return true;
 }
 

@@ -15,24 +15,24 @@ struct inputserver_msgbuffer {
 
 struct inputserver_connection {
   struct sockaddr_storage     addr;
+  inputserver_t                ss;
   socklen_t                   addrlen;
   int                         fd;
   int                         msgcnt;
-  inputserver_t                ss;
   struct inputserver_msgbuffer mbuf;
 };
 
 struct inputserver {
+  char           name[16];
+  UT_hash_handle hh;
+  cpu_set_t      cpumask;
+  pthread_t      tid;
   PortType       port;
   FDType         listenFd;
   int            epollfd;
   int            id;
   int            numconn;
   int            msgcnt;
-  pthread_t      tid;
-  cpu_set_t      cpumask;
-  char           name[16];
-  UT_hash_handle hh;
 };
 
 // public getters

@@ -31,6 +31,8 @@
 #include <errno.h>
 #include <string.h>
 #include <assert.h>
+#include <unistd.h>
+#include <fcntl.h>
 #include "net.h"
 
 extern int
@@ -42,6 +44,18 @@ net_listen(FDType fd)
   }
   return 1;
 }
+
+extern void
+net_setnonblocking(int fd)
+{
+  int flags;
+  
+  flags = fcntl(fd, F_GETFD);
+  assert(flags!=-1);
+  flags |= O_NONBLOCK;
+  flags = fcntl(fd, F_SETFD);  
+}
+
 
 extern FDType
 net_accept(FDType fd, void *addr, void *addrlen)
@@ -112,6 +126,7 @@ net_setup_listen_socket(FDType *fd, PortType *port)
     return 1;
 }
 
+// FIXME: update to newer API's
 extern int
 net_setup_connection(FDType *fd, char *host, PortType port)
 {
@@ -219,6 +234,36 @@ net_readn(FDType fd, void *vptr, size_t n)
 }
 /* end readn */
 
+extern ssize_t
+net_nonblocking_writenn(FDType fd, void * vptr, size_t n)
+{
+  size_t  nleft;
+  ssize_t nsend;
+  char    *ptr;
+  
+  ptr   = vptr;
+  nleft = n;
+
+  while (nleft > 0) {
+    // MSG_NOSIGNAL : do not raise sigpipe on connection loss
+    nsend = send(fd, ptr, nleft, MSG_NOSIGNAL);
+    //    fprintf(stderr, "%s: < %ld\n", __func__, nrecv);
+    if (nsend == 0) break;            // zero bytes? lost connection?
+    if (nsend < 0) {
+      // no more data can written right now
+      if (errno == EAGAIN || errno == EWOULDBLOCK) break;  
+      if (errno == EINTR) continue;   // syscall interrupted
+      perror("send");
+      assert(0);
+    }
+    
+    nleft -= nsend;
+    ptr   += nsend;
+  }
+  
+  return (n - nleft);
+}
+  
 extern ssize_t
 net_nonblocking_readn(FDType fd, void * vptr, size_t n)
 {

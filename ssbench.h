@@ -28,8 +28,8 @@
 #include "queue.h"
 #include "func.h"
 #include "funcserver.h"
+#include "outputserver.h"
 #include "inputserver.h"
-
 
 struct Args {
   int          inputCnt;
@@ -44,7 +44,12 @@ struct Args {
     inputserver_t     hashtable;
     pthread_barrier_t barrier;
   } inputServers;
-  
+
+  struct {
+    outputserver_t    hashtable;
+    pthread_barrier_t barrier;
+  } outputServers;
+    
   struct {
     funcserver_t      hashtable;
     pthread_barrier_t barrier;
@@ -52,14 +57,34 @@ struct Args {
 };
 
 extern struct Args Args;
-  
-#define VLPRINT(VL, fmt, ...)  {		\
+
+#define ASSERTS_OFF
+#define VERBOSE_CHECKS_OFF
+
+#ifdef ASSERTS_OFF
+#define ASSERT(...)
+#else
+#define ASSERT(...) assert(__VA_ARGS__)
+#endif
+
+#ifdef VERBOSE_CHECKS_OFF
+static inline bool verbose(int l) { return 0; }
+#define VLPRINT(VL, fmt, ...)
+#define VPRINT(fmt, ...)
+#else
+static inline bool verbose(int l) { return Args.verbose >= l; }
+#define VLPRINT(VL, fmt, ...)  {					\
     if (verbose(VL)) {							\
 	  fprintf(stderr, "%s: " fmt, __func__, __VA_ARGS__);		\
     } }
+
 #define VPRINT(fmt, ...) VLPRINT(1, fmt, __VA_ARGS__)
 
-static inline bool verbose(int l) { return Args.verbose >= l; }
+#endif
+
+#define EPRINT(fmt, ...) {fprintf(stderr, "%s: " fmt, __func__, __VA_ARGS__);}
+
+
 
 #define NYI { fprintf(stderr, "%s: %d: NYI\n", __func__, __LINE__); }
 
@@ -86,5 +111,8 @@ cpusetDump(FILE *file, cpu_set_t * cpumask)
   }
   fprintf(file, "\n");
 }
+// counting semaphore operations wait and signal
+extern struct sembuf semwait;
+extern struct sembuf semsignal;
   
 #endif

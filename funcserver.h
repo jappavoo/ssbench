@@ -5,16 +5,16 @@
 typedef struct funcserver * funcserver_t;
 
 struct funcserver {
-  uint32_t        id;
-  int             qlen;
-  semid_t         semid;
-  pthread_t       tid;
-  size_t          maxmsgsize;
+  char            name[16];
   const char     *path;
+  UT_hash_handle  hh;
   ssbench_func_t  func;
   cpu_set_t       cpumask;
-  char            name[16];
-  UT_hash_handle  hh;
+  size_t          maxmsgsize;
+  pthread_t       tid;
+  semid_t         semid;
+  uint32_t        id;
+  int             qlen;
   // this must the last field 
   struct queue    queue;
 };
@@ -61,7 +61,7 @@ extern funcserver_t funcserver_new(uint32_t id, const char * path,
 				   size_t maxmsgsize, int qlen,
 				   cpu_set_t cpumask);
 
-// core mothods
+// core moth+ods
 extern void funcserver_dump(funcserver_t this, FILE *file);
 extern QueueEntryFindRC_t funcserver_getQueueEntry(funcserver_t this,
 						   union ssbench_msghdr *h,
