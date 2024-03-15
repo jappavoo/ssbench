@@ -11,10 +11,11 @@ static void usage(char *name)
 {
   fprintf(stderr,
 	  "USAGE: %s [-v] [-i port[,cpu[,cpu,...]] "
-	  "[-f id,func,maxmsgsize,qlen[,cpu[,cpu...]] "
-	  "-o addr:port,maxmsgsize,qlen[,cpu[,cpu...]]\n"		
+	  "-o id,addr:port,maxmsgsize,qlen[,cpu[,cpu...]]\n"		
+	  "[-f id,func,maxmsgsize,qlen,outputid,outputfunctionid"
+	  "[,cpu[,cpu...]]\n "
 	  "  demux messages from one or more input ports to a specified "
-	  "function and can establishes output connections for the functions"
+	  "function and can establishes output connection for the functions"
 	  " to send messages to.\n",
 	  name);
 }
@@ -34,13 +35,12 @@ struct Args Args = {
 
 static void dumpOutputSrvs()
 {
-  inputserver_t osrv, tmp;
+  outputserver_t osrv, tmp;
 
   fprintf(stderr, "Args.outputServers.hashtable:\n");
-  HASH_ITER(hh, Args.inputServers.hashtable, osrv, tmp) {
-    inputserver_dump(osrv, stderr);
+  HASH_ITER(hh, Args.outputServers.hashtable, osrv, tmp) {
+    outputserver_dump(osrv, stderr);
   }
-
 }
 
 static void dumpInputSrvs()
@@ -102,8 +102,8 @@ static bool parseCPUSet(char *str, cpu_set_t * mask)
 	  i++;
 	  VLPRINT(2,"%d added to mask:%p", cpu, mask);
 	} else {
-	  VLPRINT(0, "%d greater than totalcpus on the system: %d\n",
-		  cpu, Args.totalcpus);
+	  EPRINT("%d greater than totalcpus on the system: %d\n",
+		 cpu, Args.totalcpus);
 	}
       }
       if (*endptr != '\0') endptr++;
@@ -121,7 +121,6 @@ setAllcpus(int max, cpu_set_t *mask) {
     VLPRINT(2, "%d added to mask:%p\n", i, mask);
   }
 }
-
 
 bool addInput(char **argv, int argc, char *optarg)
 {
@@ -181,7 +180,7 @@ bool addOutput(char **argv, int argc, char *optarg)
   /* id already in the hash? */
   HASH_FIND_INT(Args.outputServers.hashtable, &id, osrv); 
   if (osrv != NULL) {
-    VLPRINT(0, "ERROR: %08x already defined as a output id\n", id);
+    EPRINT("ERROR: %08x already defined as a output id\n", id);
     outputserver_dump(osrv,stderr);
     return false;
   }
@@ -257,7 +256,7 @@ bool addFunc(char **argv, int argc, char *optarg)
   /* id already in the hash? */
   HASH_FIND_INT(Args.funcServers.hashtable, &id, fsrv); 
   if (fsrv != NULL) {
-    VLPRINT(0, "ERROR: %08x already defined as a function id\n", id);
+    EPRINT("ERROR: %08x already defined as a function id\n", id);
     funcserver_dump(fsrv,stderr);
     return false;
   }
@@ -267,8 +266,8 @@ bool addFunc(char **argv, int argc, char *optarg)
   if (path == NULL) return false;
   func = func_getfunc(path);
   if (func == NULL) {
-    VLPRINT(0, "WARNING: no function associated with %s. Will use func=%p\n",
-	    path, func);
+    EPRINT("WARNING: no function associated with %s. Will use func=%p\n",
+	   path, func);
   }
 
   size_t maxmsgsize;
@@ -285,18 +284,36 @@ bool addFunc(char **argv, int argc, char *optarg)
   qlen = strtod(tmpstr, &endptr);
   if (endptr == tmpstr || errno != 0) return false;
 
+  uint32_t oid;
+  uint32_t ofid;
   cpu_set_t cpumask;
   CPU_ZERO(&cpumask);
   tmpstr = strtok_r(NULL, ",", &sptr);
   if (tmpstr != NULL) {
-    if (!parseCPUSet(endptr, &cpumask)) {
-      fprintf(stderr, "ERROR: invalid cpu set specifiation: %s\n", optarg);
-      usage(argv[0]);
-      return false;
+    errno = 0;   // as per man page notes for strtod or strtol
+    oid = strtod(tmpstr, &endptr);
+    if (endptr == tmpstr || errno != 0) oid = -1;
+
+    tmpstr = strtok_r(NULL, ",", &sptr);
+    if (tmpstr == NULL) return false;
+    errno = 0;   // as per man page notes for strtod or strtol
+    ofid = strtod(tmpstr, &endptr);
+    if (endptr == tmpstr || errno != 0) ofid=-1;
+
+    if (*sptr != '\0') {
+      if (!parseCPUSet(sptr, &cpumask)) {
+	fprintf(stderr, "ERROR: invalid cpu set specifiation: %s\n", sptr);
+	usage(argv[0]);
+	return false;
+      }
+    } else {
+      setAllcpus(Args.totalcpus, &cpumask);
     }
   } else {
     // if no cpu mask specified then set mask to all cpus
     setAllcpus(Args.totalcpus, &cpumask);
+    oid  = -1;
+    ofid = -1; 
   }
   
   VLPRINT(2, "id:%04x,path:%s,func:%p,maxmsgsize:%lu,qlen:%lu,cpumask:",
@@ -305,7 +322,7 @@ bool addFunc(char **argv, int argc, char *optarg)
     cpusetDump(stderr, &cpumask);
   }
 
-  fsrv = funcserver_new(id, path, func, maxmsgsize, qlen, cpumask);
+  fsrv = funcserver_new(id, path, func, maxmsgsize, qlen, oid, ofid, cpumask);
   HASH_ADD_INT(Args.funcServers.hashtable, id, fsrv); 
   Args.funcCnt++;
   return true;
@@ -354,8 +371,8 @@ processArgs(int argc, char **argv)
   if (verbose(1)) dumpArgs();
     
   if (Args.inputCnt==0) {
-    VLPRINT(0, "ERROR:%d:Require at least one -i <inputport>[,cpu...]"
-	    "input port server thread\n", Args.inputCnt);
+    EPRINT("ERROR:%d:Require at least one -i <inputport>[,cpu...]"
+	   "input port server thread\n", Args.inputCnt);
     usage(argv[0]);
     return false;
   }
@@ -366,32 +383,43 @@ processArgs(int argc, char **argv)
   pthread_barrier_init(&Args.inputServers.barrier, NULL,
 		       Args.inputCnt);
 
+  pthread_barrier_init(&Args.outputServers.barrier, NULL,
+		       Args.outputCnt);
+
 #if 0
+  // example if we want required command line arguments beyond the
+  // coammand line switches processed above
   if ((argc - optind) < 3) {
     usage(argv[0]);
     return false;
   }
 
-  Args.maskpath = argv[optind];
-  Args.svpath = argv[optind+1];
-  Args.reconspath = argv[optind+2];
+  Args.something1 = argv[optind];
+  Args.something2 = argv[optind+1];
+  Args.something3 = argv[optind+2];
 #endif
   
-
   return true;
 }
 
 void cleanup(void)
 {
-  inputserver_t isrv, stmp;
-  funcserver_t fsrv, ftmp;
+  inputserver_t  isrv, stmp;
+  outputserver_t osrv, otmp;
+  funcserver_t   fsrv, ftmp;
 
   HASH_ITER(hh, Args.inputServers.hashtable, isrv, stmp) {
     inputserver_destroy(isrv);
     HASH_DEL(Args.inputServers.hashtable, isrv); 
     free(isrv);         
   }
-  
+
+  HASH_ITER(hh, Args.outputServers.hashtable, osrv, otmp) {
+    outputserver_destroy(osrv);
+    HASH_DEL(Args.outputServers.hashtable, osrv); 
+    free(osrv);         
+  }
+
   HASH_ITER(hh, Args.funcServers.hashtable, fsrv, ftmp) {
     funcserver_destroy(fsrv);
     HASH_DEL(Args.funcServers.hashtable, fsrv); 
@@ -408,26 +436,33 @@ void signalhandler(int num)
 
 int main(int argc, char **argv)
 {
-  inputserver_t isrv;
-  funcserver_t fsrv, tmp;
+  inputserver_t  isrv;
+  outputserver_t osrv, otmp;
+  funcserver_t   fsrv, ftmp;
   int i;
   
   if (!processArgs(argc,argv)) return -1;
 
   assert(Args.inputCnt == HASH_COUNT(Args.inputServers.hashtable));
   assert(Args.funcCnt == HASH_COUNT(Args.funcServers.hashtable));
-  //  assert(Args.outputCnt == HASH_COUNT(Args.outputServers.hashtable));
+  assert(Args.outputCnt == HASH_COUNT(Args.outputServers.hashtable));
 
   atexit(cleanup);
   signal(SIGTERM, signalhandler);
   signal(SIGINT, signalhandler);
   
-  HASH_ITER(hh, Args.funcServers.hashtable, fsrv, tmp) {
+  HASH_ITER(hh, Args.funcServers.hashtable, fsrv, ftmp) {
     funcserver_start(fsrv,
 		     true //asunc
 		     );
   }
 
+  HASH_ITER(hh, Args.outputServers.hashtable, osrv, otmp) {
+    outputserver_start(osrv,
+		       true //asunc
+		       );
+  }
+  
   for (i=1; i<Args.inputCnt; i++) {
     HASH_FIND_INT(Args.inputServers.hashtable, &i, isrv);
     assert(isrv!=NULL);

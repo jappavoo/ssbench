@@ -42,6 +42,7 @@ static inline queue_entry_t queue_getentryi(queue_t this, int i)
   return (queue_entry_t)(ptr + (queue_entrysize(this) * i));
 }
 
+__attribute__((unused))
 static QueueEntryFindRC_t
 queue_getEmptyEntry(queue_t this, size_t len, queue_entry_t *qe)
 {
@@ -66,7 +67,7 @@ queue_getEmptyEntry(queue_t this, size_t len, queue_entry_t *qe)
   return Q_FOUND;
 }
 
-static bool
+__attribute__((unused)) static bool
 queue_getFullEntry(queue_t this, queue_entry_t *qe)
 {
   void * volatile *empty_ptr = (void * volatile *)&(this->full);
@@ -92,6 +93,7 @@ queue_getFullEntry(queue_t this, queue_entry_t *qe)
 // obtained from empty list. Returns true if this put is the first
 // element to go on to the full list.  This can be used to wakeup
 // a reaper thread
+__attribute__((unused))
 static bool queue_putBackFullEntry(queue_t this, queue_entry_t qe)
 {
   void * volatile *full_ptr = (void * volatile *)&(this->full);
@@ -106,6 +108,7 @@ static bool queue_putBackFullEntry(queue_t this, queue_entry_t qe)
   return false;  
 }
 
+__attribute__((unused))
 static bool queue_putBackEmptyEntry(queue_t this, queue_entry_t qe)
 {
   void * volatile *empty_ptr = (void * volatile *)&(this->empty);

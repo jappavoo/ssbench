@@ -143,7 +143,6 @@ inputserver_findFuncServerAndQueueEntry(inputserver_t this,
   funcserver_t tmpfsrv;
   ASSERT(h);
   uint32_t fid = h->fields.funcid;
-  queue_entry_t tmpqe;
   
   HASH_FIND_INT(Args.funcServers.hashtable, &fid, tmpfsrv);
 
@@ -199,12 +198,12 @@ static void inputserver_serveConnection(inputserver_t this,
       VLPRINT(2, "func:%p Q_NONE could not find an funcserver?\n", this); 
       comb->qe = NULL;
     } else if (qerc == Q_MSG2BIG) {
-      VLPRINT(0, "func:%p QMSG2BIG\n", this);
+      EPRINT("func:%p QMSG2BIG\n", this);
       comb->qe = NULL;
     } else if (qerc == Q_FULL) {
       // add code to record and signal back pressure
-      VLPRINT(0, "func:%x Q_FULL no space to place message drain\n",
-	      funcserver_getId(fsrv));
+      EPRINT("func:%x Q_FULL no space to place message drain\n",
+	     funcserver_getId(fsrv));
       comb->qe = NULL;
     } else {
       comb->qe   = qe;
@@ -225,12 +224,12 @@ static void inputserver_serveConnection(inputserver_t this,
     int tmpn = net_nonblocking_readn(cofd, tmpbuf, len-n);
     if (verbose(2)) {
       VLPRINT(2, "ignoring: %d bytes\n",tmpn);
-      hexdump(stderr, tmpbuf, tmpn); 
+      hexdump(stderr, (uint8_t *)tmpbuf, tmpn); 
     }
     n += tmpn;
   } else {
     // sizes should all have been validated already
-    char *buf = qe->data;
+    uint8_t *buf = qe->data;
     n += net_nonblocking_readn(cofd, buf, len-n);
   }
   comb->n = msghdrlen + n; // record how much data we have read in total
@@ -271,7 +270,6 @@ static void * inputserver_thread_loop(void * arg)
   } listenConnection = {
     .fd =  inputserver_getListenFd(this)
   };
-  int id = inputserver_getId(this);
   int epollfd = inputserver_getEpollfd(this);
   pthread_t tid = pthread_self();
   char *name = inputserver_getName(this);
@@ -390,9 +388,7 @@ inputserver_init(inputserver_t this, int port, int id, cpu_set_t cpumask)
   rc=net_setup_listen_socket(&fd, &port);
 
   if (rc==0) { 
-    VLPRINT(0,"net_setup_listen_socket: fd=%d port=%d\n",
-	    fd,
-	    port);
+    EPRINT("ERROR: net_setup_listen_socket: fd=%d port=%d\n", fd, port);
     return;
   }
 
@@ -407,7 +403,7 @@ inputserver_init(inputserver_t this, int port, int id, cpu_set_t cpumask)
   inputserver_setCpumask(this, cpumask);
   
   if (net_listen(fd) < 0) {
-    VLPRINT(0, "Error: net_listen: %d:%d", fd, port);
+    EPRINT("ERROR: net_listen: %d:%d", fd, port);
     return;
   }
   {

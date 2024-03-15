@@ -58,8 +58,8 @@ struct Args {
 
 extern struct Args Args;
 
-#define ASSERTS_OFF
-#define VERBOSE_CHECKS_OFF
+//#define ASSERTS_OFF
+//#define VERBOSE_CHECKS_OFF
 
 #ifdef ASSERTS_OFF
 #define ASSERT(...)

@@ -14,13 +14,21 @@ struct funcserver {
   pthread_t       tid;
   semid_t         semid;
   uint32_t        id;
+  uint32_t        oid;
+  uint32_t        ofid;
   int             qlen;
   // this must the last field 
   struct queue    queue;
 };
 // public getters
-static inline int funcserver_getId(funcserver_t this) {
+static inline uint32_t funcserver_getId(funcserver_t this) {
   return this->id;
+}
+static inline uint32_t funcserver_getOid(funcserver_t this) {
+  return this->oid;
+}
+static inline uint32_t funcserver_getOfid(funcserver_t this) {
+  return this->ofid;
 }
 static inline ssbench_func_t funcserver_getFunc(funcserver_t this) {
   return this->func;
@@ -46,11 +54,9 @@ static inline cpu_set_t funcserver_getCpumask(funcserver_t this) {
 static inline queue_t funcserver_getQueue(funcserver_t this) {
   return &(this->queue);
 }
-
 static inline char * funcserver_getName(funcserver_t this) {
   return this->name;
 }
-
 static inline unsigned int funcserver_sizeofName(funcserver_t this) {
   return sizeof(this->name);
 }
@@ -59,6 +65,7 @@ static inline unsigned int funcserver_sizeofName(funcserver_t this) {
 extern funcserver_t funcserver_new(uint32_t id, const char * path,
 				   ssbench_func_t func,
 				   size_t maxmsgsize, int qlen,
+				   uint32_t oid, uint32_t ofid,
 				   cpu_set_t cpumask);
 
 // core moth+ods

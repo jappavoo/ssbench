@@ -15,6 +15,7 @@ struct outputserver {
   size_t         qlen;
   PortType       port;
   FDType         sendFd;
+  semid_t        semid;
   int            id;
   int            msgcnt;
   // this field must be last
@@ -53,7 +54,9 @@ static inline size_t outputserver_getQlen(outputserver_t this) {
 static inline char * outputserver_getName(outputserver_t this) {
   return this->name;
 }
-
+static inline queue_t outputserver_getQueue(outputserver_t this) {
+  return &(this->queue);
+}
 static inline unsigned int outputserver_sizeofName(outputserver_t this) {
   return sizeof(this->name);
 }

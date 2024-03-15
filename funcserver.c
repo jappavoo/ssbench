@@ -15,6 +15,16 @@ static inline void funcserver_setId(funcserver_t this, uint32_t id)
   this->id = id;
 }
 
+static inline void funcserver_setOid(funcserver_t this, uint32_t oid)
+{
+  this->oid = oid;
+}
+
+static inline void funcserver_setOfid(funcserver_t this, uint32_t ofid)
+{
+  this->ofid = ofid;
+}
+
 static inline void funcserver_setTid(funcserver_t this, pthread_t tid)
 {
   this->tid = tid;
@@ -55,12 +65,14 @@ extern void
 funcserver_dump(funcserver_t this, FILE *file)
 {
   fprintf(file, "funcserver:%p id:%08x tid:%ld maxmsgsize:%lu qlen:%lu "
-	  "semid:%x func:%p(", this,
+	  "semid:%x oid=%08x ofid=%08x func:%p(", this,
 	  funcserver_getId(this),
 	  funcserver_getTid(this),
 	  funcserver_getMaxmsgsize(this),
 	  funcserver_getQlen(this),
 	  funcserver_getSemid(this),
+	  funcserver_getOid(this),
+	  funcserver_getOfid(this),
 	  funcserver_getFunc(this));
   const char *path = funcserver_getPath(this);
   if (path==NULL) {
@@ -102,7 +114,7 @@ funcserver_putBackQueueEntry(funcserver_t this,
 static void
 funcserver_init(funcserver_t this, uint32_t id, const char *path,
 		ssbench_func_t func, size_t maxmsgsize, size_t qlen,
-		cpu_set_t cpumask)
+		uint32_t oid, uint32_t ofid, cpu_set_t cpumask)
 {
   funcserver_setId(this, id);
   funcserver_setTid(this, -1);
@@ -112,22 +124,28 @@ funcserver_init(funcserver_t this, uint32_t id, const char *path,
   funcserver_setFunc(this, func);
   funcserver_setCpumask(this, cpumask);
   funcserver_setSemid(this, -1);
+  funcserver_setOid(this, oid);
+  funcserver_setOfid(this, ofid);
   queue_init(&(this->queue), maxmsgsize, qlen);
+
+  if (verbose(2)) funcserver_dump(this, stderr);
 }
 
 funcserver_t
 funcserver_new(uint32_t id, const char *path, ssbench_func_t func,
-	       size_t maxmsgsize, int qlen, cpu_set_t cpumask) {
+	       size_t maxmsgsize, int qlen, uint32_t oid, uint32_t ofid,
+	       cpu_set_t cpumask) {
   funcserver_t this;
-
   // for each queue entry required we need a queue_entry struct plus
   // enought bytes for the maximum  size of a single message for this
-  // funceration.
-  this = malloc(sizeof(struct funcserver) +
-		((sizeof(struct queue_entry) + maxmsgsize) * qlen));
+  // function.
+  const unsigned int qbytes = ((sizeof(struct queue_entry) +
+				maxmsgsize)
+			       * qlen);
+  this = malloc(sizeof(struct funcserver) + qbytes);
+
   ASSERT(this);
-  funcserver_init(this, id, path, func, maxmsgsize, qlen, cpumask);
-  if (verbose(2)) funcserver_dump(this, stderr);
+  funcserver_init(this, id, path, func, maxmsgsize, qlen, oid, ofid, cpumask);
   return this;
 }
 
@@ -156,7 +174,7 @@ static void * funcserver_thread_loop(void * arg)
   funcserver_setSemid(this, semid);
   
   /* initlize the semaphore (#0 in the set) count to 0 */
-  rc = semctl(semid, 0, SETVAL, (int)0)
+  rc = semctl(semid, 0, SETVAL, (int)0);
   ASSERT(rc==0);
 
   if (verbose(1)) {

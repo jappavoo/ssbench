@@ -37,7 +37,7 @@ func_getfunc(const char *path)
     
     getfunc = dlsym(dlhdl, "get_ssbench_func");
     if (getfunc == NULL) {
-      VLPRINT(0, "ERROR: was not able to find get_ssbench_func in %s\n", path);
+      EPRINT("ERROR: was not able to find get_ssbench_func in %s\n", path);
       dlclose(dlhdl);
       exit(EXIT_FAILURE);
     }

@@ -5,48 +5,58 @@
 #include <fcntl.h>
 #include <arpa/inet.h>
 #include <errno.h>
+#include <sys/ipc.h>
+#include <sys/sem.h>
+#include <fcntl.h>
 
 //012345678901234567890123456789012345678901234567890123456789012345678901234567
-#define SOVLP(VL,fmt,...)				  \
+#define OSVLP(VL,fmt,...)				  \
   VLPRINT(VL,"%p:%d:%lx:" fmt, this, outputserver_getId(this),	\
 	 outputserver_getTid(this), __VA_ARGS__)
 
-static inline void outputserver_setPort(outputserver_t this, int p) {
+static inline void outputserver_setPort(outputserver_t this, int p)
+{
   this->port = p;
 }
 
-static inline void outputserver_setSendfd(outputserver_t this, int fd) {
+static inline void outputserver_setSendfd(outputserver_t this, int fd)
+{
   this->sendFd = fd;
 }
 
-static inline void outputserver_setId(outputserver_t this, int id) {
+static inline void outputserver_setId(outputserver_t this, int id)
+{
   this->id = id;
 }
 
-static inline void outputserver_setTid(outputserver_t this, pthread_t tid) {
+static inline void outputserver_setTid(outputserver_t this, pthread_t tid)
+{
   this->tid = tid;
 }
 
-static inline void outputserver_setMsgcnt(outputserver_t this, int c) {
+static inline void outputserver_setMsgcnt(outputserver_t this, int c)
+{
   this->msgcnt = c;
 }
 
-static inline void outputserver_incMsgcnt(outputserver_t this, int c) {
+static inline void outputserver_incMsgcnt(outputserver_t this, int c)
+{
   this->msgcnt++;
 }
-
 
 static inline void outputserver_setCpumask(outputserver_t this,
 					   cpu_set_t cpumask) {
   this->cpumask = cpumask;
 }
 
-static inline void outputserver_setHost(outputserver_t this, const char *host) {
+static inline void outputserver_setHost(outputserver_t this, const char *host)
+{
   this->host = host;
 }
 
 static inline void outputserver_setMaxmsgsize(outputserver_t this,
-					     size_t maxmsgsize) {
+					     size_t maxmsgsize)
+{
   this->maxmsgsize = maxmsgsize;
 }
 
@@ -54,7 +64,12 @@ static inline void outputserver_setQlen(outputserver_t this, size_t qlen)
 {
   this->qlen = qlen;
 }
-					
+
+static inline void outputserver_setSemid(outputserver_t this, int semid)
+{
+  this->semid = semid;
+}
+
 void
 outputserver_dump(outputserver_t this, FILE *file)
 {
@@ -69,7 +84,6 @@ outputserver_dump(outputserver_t this, FILE *file)
 	  outputserver_getQlen(this));
 }
 
-#if 0
 #define MAX_EVENTS 1024
 // epoll code is based on example from the man page
 static void * outputserver_thread_loop(void * arg)
@@ -80,6 +94,8 @@ static void * outputserver_thread_loop(void * arg)
   char *name = outputserver_getName(this);
   unsigned int nsize = outputserver_sizeofName(this);
   queue_t q  = outputserver_getQueue(this);
+  PortType port = outputserver_getPort(this);
+  int sendfd = outputserver_getSendfd(this);
   queue_entry_t qe;
 
   outputserver_setTid(this, tid);
@@ -115,13 +131,10 @@ static void * outputserver_thread_loop(void * arg)
     OSVLP(2, "%s", "AWAKE\n");
     queue_getFullEntry(q, &qe);
     assert(qe);
-    net_writen(ofd, qe->data, qe->len); 
-    queue_putBackEmptyEntry(q, &qe);
+    net_writen(sendfd, qe->data, qe->len); 
+    queue_putBackEmptyEntry(q, qe);
   }
 }
-#else
-static void * outputserver_thread_loop(void * arg) {}
-#endif
 
 void outputserver_start(outputserver_t this, bool async)
 {
@@ -155,13 +168,13 @@ void outputserver_start(outputserver_t this, bool async)
 extern void
 outputserver_destroy(outputserver_t this)
 {
-  SOVLP(1,"%s", "called\n");
+  OSVLP(1,"%s", "called\n");
 }
 
 static void
 outputserver_init(outputserver_t this, int id, const char *host,
 		  int port, int fd, size_t maxmsgsize, size_t qlen,
-		  cpu_set_t cpumask)
+		  cpu_set_t cpumask, size_t qentrysizemax, size_t qbytes)
 {
   outputserver_setSendfd(this, fd);
   outputserver_setHost(this, host);
@@ -171,6 +184,7 @@ outputserver_init(outputserver_t this, int id, const char *host,
   outputserver_setMaxmsgsize(this, 0);
   outputserver_setQlen(this, qlen);
   outputserver_setCpumask(this, cpumask);
+  queue_init(&(this->queue), qentrysizemax, qlen);
   
   if (verbose(2)) outputserver_dump(this, stderr);
 }
@@ -179,10 +193,14 @@ outputserver_t
 outputserver_new(int id, const char *host, int port, int fd, size_t maxmsgsize,
 		 size_t qlen, cpu_set_t cpumask) {
   outputserver_t this;
-  
-  this = malloc(sizeof(struct outputserver));
+  // the data of output bound queue entries need to contain both
+  // a message header and the message data
+  const unsigned int maxqentrysize = sizeof(union ssbench_msghdr) + maxmsgsize; 
+  const unsigned int qbytes = ((sizeof(struct queue_entry) + maxqentrysize)				
+			       * qlen);
+  this = malloc(sizeof(struct outputserver) + qbytes);
   assert(this);
-  outputserver_init(this, id, host, port, fd, maxmsgsize, qlen, cpumask);  
+  outputserver_init(this, id, host, port, fd, maxmsgsize, qlen, cpumask, qbytes);
   return this;
 }
 
