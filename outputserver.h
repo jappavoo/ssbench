@@ -2,8 +2,6 @@
 #define __OUTPUTSERVER_H__
 //012345678901234567890123456789012345678901234567890123456789012345678901234567
 // typedefs
-typedef struct outputserver * outputserver_t;
-
 
 struct outputserver {
   char           name[16];
@@ -60,7 +58,30 @@ static inline queue_t outputserver_getQueue(outputserver_t this) {
 static inline unsigned int outputserver_sizeofName(outputserver_t this) {
   return sizeof(this->name);
 }
+static inline semid_t outputserver_getSemid(outputserver_t this) {
+  return this->semid;
+}
 
+__attribute__((unused)) static QueueEntryFindRC_t
+outputserver_getQueueEntry(outputserver_t this, size_t *len, queue_entry_t *qe)
+{
+  queue_t q = outputserver_getQueue(this);
+  return queue_getEmptyEntry(q, false, len, qe);
+}
+
+__attribute__((unused)) static void
+outputserver_putBackQueueEntry(outputserver_t this, queue_entry_t *qe)
+{
+  queue_t q = outputserver_getQueue(this);
+  semid_t semid = outputserver_getSemid(this);
+  queue_putBackFullEntry(q, *qe);
+  *qe = NULL;
+  int rc = semop(semid, &semsignal, 1);
+  if (rc<0) {
+    perror("semop:");
+    EEXIT();
+  }
+}
 // new operator 
 extern outputserver_t outputserver_new(int id, const char *host, int port,
 				       int sfd, size_t maxmsgsize, size_t qlen,

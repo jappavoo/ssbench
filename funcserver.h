@@ -2,13 +2,13 @@
 #define __FUNCSERVER_H__
 
 // typedefs
-typedef struct funcserver * funcserver_t;
 
 struct funcserver {
   char            name[16];
   const char     *path;
-  UT_hash_handle  hh;
   ssbench_func_t  func;
+  outputserver_t  osrv;
+  UT_hash_handle  hh;
   cpu_set_t       cpumask;
   size_t          maxmsgsize;
   pthread_t       tid;
@@ -29,6 +29,9 @@ static inline uint32_t funcserver_getOid(funcserver_t this) {
 }
 static inline uint32_t funcserver_getOfid(funcserver_t this) {
   return this->ofid;
+}
+static inline outputserver_t funcserver_getOsrv(funcserver_t this) {
+  return this->osrv;
 }
 static inline ssbench_func_t funcserver_getFunc(funcserver_t this) {
   return this->func;

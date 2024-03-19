@@ -44,12 +44,16 @@ static inline queue_entry_t queue_getentryi(queue_t this, int i)
 
 __attribute__((unused))
 static QueueEntryFindRC_t
-queue_getEmptyEntry(queue_t this, size_t len, queue_entry_t *qe)
+queue_getEmptyEntry(queue_t this, bool checklen, size_t *len, queue_entry_t *qe)
 {
   void * volatile *empty_ptr = (void * volatile *)&(this->empty);
-  if (len > queue_getMaxentrysize(this)) {
-    *qe = NULL;
-    return Q_MSG2BIG;
+  if (checklen) {
+    if (*len > queue_getMaxentrysize(this)) {
+      *qe = NULL;
+      return Q_MSG2BIG;
+    }
+  } else {
+    *len = queue_getMaxentrysize(this);
   }
  retry:
   queue_entry_t qe_head = this->empty;

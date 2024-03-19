@@ -54,7 +54,9 @@ static inline void inputserver_setCpumask(inputserver_t this, cpu_set_t cpumask)
 
 static void msgbuf_reset(inputserver_msgbuffer_t mb)
 {
-  mb->hdr.raw = 0;
+  mb->hdr.raw[0] = 0;
+  _Static_assert(sizeof(msghdr_bytes_t)==(sizeof(uint64_t)*1),
+		 "missmatch msg raw size");
   mb->n       = 0;
   mb->fsrv    = NULL;
   mb->qe      = NULL;
@@ -64,7 +66,7 @@ static void msgbuf_reset(inputserver_msgbuffer_t mb)
 static void msgbuf_dump(inputserver_msgbuffer_t mb)
 {
   fprintf(stderr, "%p:hdr.raw:%lx (funcid:%x datalen:%d) n:%d fsrv:%p qe:%p\n",
-	  mb, mb->hdr.raw, mb->hdr.fields.funcid, mb->hdr.fields.datalen,
+	  mb, mb->hdr.raw[0], mb->hdr.fields.funcid, mb->hdr.fields.datalen,
 	  mb->n, mb->fsrv, mb->qe);
 }
 

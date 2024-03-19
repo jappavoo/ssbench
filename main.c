@@ -127,7 +127,7 @@ bool addInput(char **argv, int argc, char *optarg)
   int port;
   char *endptr;
   cpu_set_t cpumask;	
-  int id = Args.inputCnt;
+  id_t id = Args.inputCnt;
   inputserver_t isrv;
   
   errno = 0;   // as per man page notes for strtod or strtol
@@ -171,7 +171,7 @@ bool addOutput(char **argv, int argc, char *optarg)
   outputserver_t osrv;
   int rc;
   
-  uint32_t id;
+  id_t id;
   tmpstr = strtok_r(optarg, ",", &sptr);
   if (tmpstr == NULL) return false;
   errno = 0;   // as per man page notes for strtod or strtol
@@ -247,7 +247,7 @@ bool addFunc(char **argv, int argc, char *optarg)
   char *tmpstr;
   funcserver_t fsrv;
   
-  uint32_t id;
+  id_t id;
   tmpstr = strtok_r(optarg, ",", &sptr);
   if (tmpstr == NULL) return false;
   errno = 0;   // as per man page notes for strtod or strtol
@@ -284,21 +284,21 @@ bool addFunc(char **argv, int argc, char *optarg)
   qlen = strtod(tmpstr, &endptr);
   if (endptr == tmpstr || errno != 0) return false;
 
-  uint32_t oid;
-  uint32_t ofid;
+  id_t oid;
+  id_t ofid;
   cpu_set_t cpumask;
   CPU_ZERO(&cpumask);
   tmpstr = strtok_r(NULL, ",", &sptr);
   if (tmpstr != NULL) {
     errno = 0;   // as per man page notes for strtod or strtol
     oid = strtod(tmpstr, &endptr);
-    if (endptr == tmpstr || errno != 0) oid = -1;
+    if (endptr == tmpstr || errno != 0) oid = ID_NULL;
 
     tmpstr = strtok_r(NULL, ",", &sptr);
     if (tmpstr == NULL) return false;
     errno = 0;   // as per man page notes for strtod or strtol
     ofid = strtod(tmpstr, &endptr);
-    if (endptr == tmpstr || errno != 0) ofid=-1;
+    if (endptr == tmpstr || errno != 0) ofid = ID_NULL;
 
     if (*sptr != '\0') {
       if (!parseCPUSet(sptr, &cpumask)) {
@@ -312,8 +312,8 @@ bool addFunc(char **argv, int argc, char *optarg)
   } else {
     // if no cpu mask specified then set mask to all cpus
     setAllcpus(Args.totalcpus, &cpumask);
-    oid  = -1;
-    ofid = -1; 
+    oid  = ID_NULL;
+    ofid = ID_NULL; 
   }
   
   VLPRINT(2, "id:%04x,path:%s,func:%p,maxmsgsize:%lu,qlen:%lu,cpumask:",
@@ -402,6 +402,7 @@ processArgs(int argc, char **argv)
   return true;
 }
 
+extern 
 void cleanup(void)
 {
   inputserver_t  isrv, stmp;

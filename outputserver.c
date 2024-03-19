@@ -174,7 +174,7 @@ outputserver_destroy(outputserver_t this)
 static void
 outputserver_init(outputserver_t this, int id, const char *host,
 		  int port, int fd, size_t maxmsgsize, size_t qlen,
-		  cpu_set_t cpumask, size_t qentrysizemax, size_t qbytes)
+		  cpu_set_t cpumask, size_t qentrysizemax)
 {
   outputserver_setSendfd(this, fd);
   outputserver_setHost(this, host);
@@ -200,7 +200,8 @@ outputserver_new(int id, const char *host, int port, int fd, size_t maxmsgsize,
 			       * qlen);
   this = malloc(sizeof(struct outputserver) + qbytes);
   assert(this);
-  outputserver_init(this, id, host, port, fd, maxmsgsize, qlen, cpumask, qbytes);
+  outputserver_init(this, id, host, port, fd, maxmsgsize, qlen, cpumask,
+		    maxqentrysize);
   return this;
 }
 

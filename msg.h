@@ -2,11 +2,13 @@
 #define __MSG_H__
 
 union ssbench_msghdr {
-  uint64_t raw;
-  char     buf[sizeof(uint64_t)];
+  msghdr_bytes_t raw;
+  char     buf[sizeof(msghdr_bytes_t)];
   struct {
-    uint32_t funcid;
+    id_t funcid;
+    // qidx_t qidx
     uint32_t datalen;
+    // uint32_t unused;
   } fields;
 };
     

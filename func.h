@@ -1,7 +1,7 @@
 #ifndef __SSBENCH_FUNC__
 #define __SSBENCH_FUNC__
 
-typedef void * ssbench_func(uint8_t *data_in, size_t n_in,
+typedef size_t ssbench_func(uint8_t *data_in, size_t n_in,
 			    uint8_t *data_out, size_t n_out,
 			    void *ctxt);
 

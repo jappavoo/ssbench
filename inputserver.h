@@ -2,10 +2,6 @@
 #define __INPUTSERVER_H__
 //012345678901234567890123456789012345678901234567890123456789012345678901234567
 // typedefs
-typedef struct inputserver * inputserver_t;
-typedef struct inputserver_connection * inputserver_connection_t;
-typedef struct inputserver_msgbuffer * inputserver_msgbuffer_t;
-
 struct inputserver_msgbuffer {
   union ssbench_msghdr hdr;
   int                  n;

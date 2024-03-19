@@ -15,6 +15,9 @@
 #include <sys/epoll.h>
 #include <sched.h>
 #include <uthash.h>
+#include <sys/ipc.h>
+#include <sys/sem.h>
+#include <fcntl.h>
 
 #include "ssbench_types.h"
 
@@ -23,6 +26,49 @@
 #include "ext/tsclog/now.h"
 #include "ext/tsclog/buffer.h"
 #include "ext/tsclog/tsclogc.h"
+
+//#define ASSERTS_OFF
+//#define VERBOSE_CHECKS_OFF
+
+#ifdef ASSERTS_OFF
+#define ASSERT(...)
+#else
+#define ASSERT(...) assert(__VA_ARGS__)
+#endif
+
+extern void cleanup();
+#define EPRINT(fmt, ...) {fprintf(stderr, "%s: " fmt, __func__, __VA_ARGS__);}
+static inline void EEXIT() {
+  cleanup();
+  exit(EXIT_FAILURE);
+}
+
+#define NYI { fprintf(stderr, "%s: %d: NYI\n", __func__, __LINE__); }
+
+// if gettid optimization avaiable use it
+#if __GLIBC_PREREQ(2,30)
+#define _GNU_SOURCE
+#include <unistd.h>
+#else
+#include <sys/syscall.h>
+pid_t
+gettid(void)
+{
+    return syscall(SYS_gettid);
+}
+#endif
+
+static inline void
+cpusetDump(FILE *file, cpu_set_t * cpumask)
+{
+  for (int j = 0; j < CPU_SETSIZE; j++) {
+    if (CPU_ISSET(j, cpumask)) {
+      fprintf(file, "%d ", j);
+    }
+  }
+  fprintf(file, "\n");
+}
+
 #include "net.h"
 #include "msg.h"
 #include "queue.h"
@@ -58,15 +104,6 @@ struct Args {
 
 extern struct Args Args;
 
-//#define ASSERTS_OFF
-//#define VERBOSE_CHECKS_OFF
-
-#ifdef ASSERTS_OFF
-#define ASSERT(...)
-#else
-#define ASSERT(...) assert(__VA_ARGS__)
-#endif
-
 #ifdef VERBOSE_CHECKS_OFF
 static inline bool verbose(int l) { return 0; }
 #define VLPRINT(VL, fmt, ...)
@@ -82,37 +119,4 @@ static inline bool verbose(int l) { return Args.verbose >= l; }
 
 #endif
 
-#define EPRINT(fmt, ...) {fprintf(stderr, "%s: " fmt, __func__, __VA_ARGS__);}
-
-
-
-#define NYI { fprintf(stderr, "%s: %d: NYI\n", __func__, __LINE__); }
-
-// if gettid optimization avaiable use it
-#if __GLIBC_PREREQ(2,30)
-#define _GNU_SOURCE
-#include <unistd.h>
-#else
-#include <sys/syscall.h>
-pid_t
-gettid(void)
-{
-    return syscall(SYS_gettid);
-}
-#endif
-
-static inline void
-cpusetDump(FILE *file, cpu_set_t * cpumask)
-{
-  for (int j = 0; j < CPU_SETSIZE; j++) {
-    if (CPU_ISSET(j, cpumask)) {
-      fprintf(file, "%d ", j);
-    }
-  }
-  fprintf(file, "\n");
-}
-// counting semaphore operations wait and signal
-extern struct sembuf semwait;
-extern struct sembuf semsignal;
-  
 #endif

@@ -1,8 +1,5 @@
 #define _GNU_SOURCE
 #include "ssbench.h"
-#include <sys/ipc.h>
-#include <sys/sem.h>
-#include <fcntl.h>
 
 //012345678901234567890123456789012345678901234567890123456789012345678901234567
 
@@ -61,11 +58,16 @@ static inline void funcserver_setSemid(funcserver_t this, semid_t semid)
   this->semid = semid;
 }
 
+static inline void funcserver_setOsrv(funcserver_t this, outputserver_t osrv)
+{
+  this->osrv = osrv;
+}
+
 extern void
 funcserver_dump(funcserver_t this, FILE *file)
 {
   fprintf(file, "funcserver:%p id:%08x tid:%ld maxmsgsize:%lu qlen:%lu "
-	  "semid:%x oid=%08x ofid=%08x func:%p(", this,
+	  "semid:%x oid=%08x ofid=%08x osrv=%p func:%p(", this,
 	  funcserver_getId(this),
 	  funcserver_getTid(this),
 	  funcserver_getMaxmsgsize(this),
@@ -73,7 +75,9 @@ funcserver_dump(funcserver_t this, FILE *file)
 	  funcserver_getSemid(this),
 	  funcserver_getOid(this),
 	  funcserver_getOfid(this),
+	  funcserver_getOsrv(this),
 	  funcserver_getFunc(this));
+  
   const char *path = funcserver_getPath(this);
   if (path==NULL) {
     fprintf(file, "%p) cpumask:", path);
@@ -93,7 +97,7 @@ funcserver_getQueueEntry(funcserver_t this,
   queue_t q  = funcserver_getQueue(this);
   size_t len = h->fields.datalen;
 
-  return queue_getEmptyEntry(q, len, qe);
+  return queue_getEmptyEntry(q, true, &len, qe);
 }
 
 extern void
@@ -101,13 +105,13 @@ funcserver_putBackQueueEntry(funcserver_t this,
 			     queue_entry_t *qe)
 {
   queue_t q = funcserver_getQueue(this);
-  int semid = funcserver_getSemid(this);
+  semid_t semid = funcserver_getSemid(this);
   queue_putBackFullEntry(q, *qe);
   *qe = NULL;
   int rc = semop(semid, &semsignal, 1);
   if (rc<0) {
     perror("semop:");
-    exit(-1);
+    EEXIT();
   }
 }
     
@@ -126,6 +130,21 @@ funcserver_init(funcserver_t this, uint32_t id, const char *path,
   funcserver_setSemid(this, -1);
   funcserver_setOid(this, oid);
   funcserver_setOfid(this, ofid);
+
+  if (oid == ID_NULL) {
+    funcserver_setOsrv(this, NULL);
+  } else {
+    // lookup oid in hash
+    outputserver_t osrv;
+    HASH_FIND_INT(Args.outputServers.hashtable, &oid, osrv);
+    if (osrv == NULL) {
+      EPRINT("ERROR: %s: Cannot find output:%08x\n", __func__, oid);
+      EEXIT();
+    } else {
+      funcserver_setOsrv(this, osrv);
+    }
+    ASSERT(ofid != ID_NULL);
+  }
   queue_init(&(this->queue), maxmsgsize, qlen);
 
   if (verbose(2)) funcserver_dump(this, stderr);
@@ -152,14 +171,19 @@ funcserver_new(uint32_t id, const char *path, ssbench_func_t func,
 static void * funcserver_thread_loop(void * arg)
 {
   funcserver_t this = arg;
-  int id = funcserver_getId(this);
+  id_t id = funcserver_getId(this);
   pthread_t tid = pthread_self();
   char *name = funcserver_getName(this);
   unsigned int nsize = funcserver_sizeofName(this);
   const char *path= funcserver_getPath(this);
-  queue_t q  = funcserver_getQueue(this);
+  queue_t iq  = funcserver_getQueue(this);
+  queue_entry_t iqe, oqe;
   ssbench_func_t func = funcserver_getFunc(this);
-  queue_entry_t qe;
+  outputserver_t osrv = funcserver_getOsrv(this);
+  id_t ofid = funcserver_getOfid(this);
+  union ssbench_msghdr *omh;
+  size_t olen, flen;
+  uint8_t *odata;
   int rc;
   
   funcserver_setTid(this, tid);
@@ -196,12 +220,33 @@ static void * funcserver_thread_loop(void * arg)
     }
     FSVLP(2, "%s", "AWAKE\n");
     // grab a full entry -- must exist if semaphore was signaled
-    queue_getFullEntry(q, &qe);
-    ASSERT(qe);
-    // invoke the function on the input data and pass output buffer NYI
-    func(qe->data, qe->len, NULL, 0, this);
+    queue_getFullEntry(iq, &iqe);
+    ASSERT(iqe);
+    if (osrv != NULL) {
+      QueueEntryFindRC_t qrc = outputserver_getQueueEntry(osrv, &olen, &oqe);
+      if (qrc == Q_FULL) {
+	EPRINT("%s", "NO Output Queue entry available -- BACK PRESSURE??");
+	NYI;
+      } else {
+	assert(olen > sizeof(union ssbench_msghdr));
+	omh = (union ssbench_msghdr *)(oqe->data);
+	omh->fields.funcid = ofid;
+	omh->fields.datalen = sizeof(union ssbench_msghdr);
+	odata = &(oqe->data[sizeof(union ssbench_msghdr)]);
+	olen -= sizeof(union ssbench_msghdr);
+      }
+    } else {
+      odata = NULL;
+      olen = 0;
+    }    
+    // invoke the function on the input data and pass output buffer
+    flen = func(iqe->data, iqe->len, odata, olen, this);
     // function done so we can put entry back on empty list
-    queue_putBackEmptyEntry(q, qe);
+    if (osrv) {
+      omh->fields.datalen += flen;
+      outputserver_putBackQueueEntry(osrv, &oqe);
+    }
+    queue_putBackEmptyEntry(iq, iqe);
   }
   
 }

@@ -1,6 +1,6 @@
 SRCS := main.c inputserver.c outputserver.c queue.c funcserver.c func.c net.c hexdump.c misc.c
 OBJS := $(SRCS:%.c=%.o) ext/tsclog/tsclog.o
-FUNCSRCS := stdout.c sleep.c
+FUNCSRCS := stdout.c sleep.c copy.c
 FUNCSOS := $(FUNCSRCS:%.c=%.so) 
 O:=0
 CFLAGS += -g -O${O} -std=gnu99 -MD -MP -Wall -Werror

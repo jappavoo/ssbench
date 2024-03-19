@@ -5,22 +5,20 @@
 #include <string.h>
 #include <pthread.h>
 
-#define DEFAULT_SLEEP 20
-
-size_t func_sleep(uint8_t *data_in, size_t n_in,
-		  uint8_t *data_out, size_t n_out,
-		  void *ssbench_ctxt)
+size_t func_copy(uint8_t *data_in, size_t n_in,
+		 uint8_t *data_out, size_t n_out,
+		 void *ssbench_ctxt)
 {
-  char buf[n_in+1];
-  int n;
-  memcpy(buf,data_in,n_in);
-  buf[n_in+1]=0;
-  
-  if (sscanf(buf, "%d", &n)!=1) n=DEFAULT_SLEEP;
-  fprintf(stderr, "%ld, sleeping for %d\n", pthread_self(), n);
-  sleep(n);
-  fprintf(stderr, "%ld, done.\n", pthread_self());
-  return 0;
+  pthread_t tid =  pthread_self();
+  if (data_in != NULL) {
+    assert(data_out != NULL);
+    assert(n_out >= n_in);
+  }
+  fprintf(stderr, "%ld, copy %lu bytes from %p(%lu) to %p(%lu)\n", tid,
+	  n_in, data_in, n_in, data_out, n_out);
+  memcpy(data_out, data_in, n_in);
+  fprintf(stderr, "%ld, done.\n", tid);
+  return n_in;
 }
 
 // This funtion will get invoked once when the path is loaded
@@ -29,5 +27,5 @@ size_t func_sleep(uint8_t *data_in, size_t n_in,
 // it must return the ssbench func you want to a funcserver thread
 // to invoke with the data of a message
 void *  get_ssbench_func(const char *path, int verbosity) {
-  return  func_sleep;
+  return  func_copy;
 }

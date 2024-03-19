@@ -3,12 +3,12 @@
 #include <unistd.h>
 #include <assert.h>
 
-void * stdout_write(uint8_t *data_in, size_t n_in,
+size_t stdout_write(uint8_t *data_in, size_t n_in,
 		    uint8_t *data_out, size_t n_out,
 		    void *ssbench_ctxt)
 {
   write(STDOUT_FILENO, data_in, n_in);
-  return NULL;
+  return 0;
 }
 
 // This funtion will get invoked once when the path is loaded

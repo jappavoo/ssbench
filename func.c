@@ -39,7 +39,7 @@ func_getfunc(const char *path)
     if (getfunc == NULL) {
       EPRINT("ERROR: was not able to find get_ssbench_func in %s\n", path);
       dlclose(dlhdl);
-      exit(EXIT_FAILURE);
+      EEXIT();
     }
     ssbench_func_t func = getfunc(path, Args.verbose);
     VLPRINT(2, "getfunc:%p returned %p\n", getfunc, func);
