@@ -82,6 +82,7 @@ outputserver_dump(outputserver_t this, FILE *file)
 	  outputserver_getSendfd(this),
 	  outputserver_getMaxmsgsize(this),
 	  outputserver_getQlen(this));
+  queue_dump(outputserver_getQueue(this),stderr);
 }
 
 #define MAX_EVENTS 1024
@@ -123,8 +124,10 @@ static void * outputserver_thread_loop(void * arg)
   pthread_barrier_wait(&(Args.outputServers.barrier));
   
   for (;;) {
+  retry:
     int rc = semop(semid, &semwait, 1);
     if (rc<0) {
+      if (errno == EINTR) goto retry;
       perror("semop:");
       exit(-1);
     }

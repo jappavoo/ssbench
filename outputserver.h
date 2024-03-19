@@ -76,8 +76,10 @@ outputserver_putBackQueueEntry(outputserver_t this, queue_entry_t *qe)
   semid_t semid = outputserver_getSemid(this);
   queue_putBackFullEntry(q, *qe);
   *qe = NULL;
+ retry:
   int rc = semop(semid, &semsignal, 1);
   if (rc<0) {
+    if (errno == EINTR) goto retry;
     perror("semop:");
     EEXIT();
   }

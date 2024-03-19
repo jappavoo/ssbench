@@ -108,8 +108,10 @@ funcserver_putBackQueueEntry(funcserver_t this,
   semid_t semid = funcserver_getSemid(this);
   queue_putBackFullEntry(q, *qe);
   *qe = NULL;
+ retry:
   int rc = semop(semid, &semsignal, 1);
   if (rc<0) {
+    if (errno == EINTR) goto retry;
     perror("semop:");
     EEXIT();
   }
@@ -213,8 +215,10 @@ static void * funcserver_thread_loop(void * arg)
   pthread_barrier_wait(&(Args.funcServers.barrier));
 
   for (;;) {
+  retry:
     int rc = semop(semid, &semwait, 1);
     if (rc<0) {
+      if (errno == EINTR) goto retry;
       perror("semop:");
       exit(-1);
     }
@@ -223,16 +227,22 @@ static void * funcserver_thread_loop(void * arg)
     queue_getFullEntry(iq, &iqe);
     ASSERT(iqe);
     if (osrv != NULL) {
+      if (verbose(2)) {
+	outputserver_dump(osrv,stderr);
+      }
       QueueEntryFindRC_t qrc = outputserver_getQueueEntry(osrv, &olen, &oqe);
       if (qrc == Q_FULL) {
 	EPRINT("%s", "NO Output Queue entry available -- BACK PRESSURE??");
 	NYI;
       } else {
+	FSVLP(2,"oqe=%p oqe->data=%p oqe->len:%lu olen=%lu\n",
+	     oqe, oqe->data, oqe->len, olen);
 	assert(olen > sizeof(union ssbench_msghdr));
 	omh = (union ssbench_msghdr *)(oqe->data);
 	omh->fields.funcid = ofid;
-	omh->fields.datalen = sizeof(union ssbench_msghdr);
+	omh->fields.datalen = 0;
 	odata = &(oqe->data[sizeof(union ssbench_msghdr)]);
+	oqe->len = sizeof(union ssbench_msghdr);
 	olen -= sizeof(union ssbench_msghdr);
       }
     } else {
@@ -243,7 +253,8 @@ static void * funcserver_thread_loop(void * arg)
     flen = func(iqe->data, iqe->len, odata, olen, this);
     // function done so we can put entry back on empty list
     if (osrv) {
-      omh->fields.datalen += flen;
+      omh->fields.datalen = flen;
+      oqe->len += flen;
       outputserver_putBackQueueEntry(osrv, &oqe);
     }
     queue_putBackEmptyEntry(iq, iqe);

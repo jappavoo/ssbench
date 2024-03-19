@@ -15,6 +15,7 @@
 #include <sys/epoll.h>
 #include <sched.h>
 #include <uthash.h>
+#include <errno.h>
 #include <sys/ipc.h>
 #include <sys/sem.h>
 #include <fcntl.h>
