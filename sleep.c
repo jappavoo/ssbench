@@ -14,7 +14,7 @@ size_t func_sleep(uint8_t *data_in, size_t n_in,
   char buf[n_in+1];
   int n;
   memcpy(buf,data_in,n_in);
-  buf[n_in+1]=0;
+  buf[n_in]=0;
   
   if (sscanf(buf, "%d", &n)!=1) n=DEFAULT_SLEEP;
   fprintf(stderr, "%ld, sleeping for %d\n", pthread_self(), n);
