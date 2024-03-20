@@ -74,33 +74,33 @@ cpusetDump(FILE *file, cpu_set_t * cpumask)
 #include "msg.h"
 #include "queue.h"
 #include "func.h"
-#include "funcserver.h"
-#include "outputserver.h"
-#include "inputserver.h"
+#include "worker.h"
+#include "output.h"
+#include "input.h"
 
 struct Args {
   int          inputCnt;
   int          outputCnt;
-  int          funcCnt;
+  int          workerCnt;
   int          verbose;
   unsigned int totalcpus;
   unsigned int availcpus;
   pid_t        pid;
   
   struct {
-    inputserver_t     hashtable;
+    input_t           hashtable;
     pthread_barrier_t barrier;
-  } inputServers;
+  } inputs;
 
   struct {
-    outputserver_t    hashtable;
+    output_t          hashtable;
     pthread_barrier_t barrier;
-  } outputServers;
+  } outputs;
     
   struct {
-    funcserver_t      hashtable;
+    worker_t      hashtable;
     pthread_barrier_t barrier;
-  } funcServers;
+  } workers;
 };
 
 extern struct Args Args;

@@ -5,10 +5,8 @@ union ssbench_msghdr {
   msghdr_bytes_t raw;
   char     buf[sizeof(msghdr_bytes_t)];
   struct {
-    id_t funcid;
-    // qidx_t qidx
-    uint32_t datalen;
-    // uint32_t unused;
+    union wqpair_t wq;
+    uint32_t       datalen;
   } fields;
 };
     

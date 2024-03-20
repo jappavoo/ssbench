@@ -7,96 +7,115 @@
 #include <errno.h>
 
 //012345678901234567890123456789012345678901234567890123456789012345678901234567
-#define SSVLP(VL,fmt,...)				  \
-  VLPRINT(VL,"%p:%d:%lx:" fmt, this, inputserver_getId(this),	\
-	 inputserver_getTid(this), __VA_ARGS__)
+#define IVLP(VL,fmt,...)				  \
+  VLPRINT(VL,"%p:%d:%lx:" fmt, this, input_getId(this),	\
+	 input_getTid(this), __VA_ARGS__)
 
-static inline void inputserver_setPort(inputserver_t this, int p) {
+static inline void input_setPort(input_t this, int p)
+{
   this->port = p;
 }
 
-static inline void inputserver_setListenFd(inputserver_t this, int fd) {
+static inline
+void input_setListenFd(input_t this, int fd)
+{
   this->listenFd = fd;
 }
 
-static inline void inputserver_setId(inputserver_t this, int id) {
+static inline void
+input_setId(input_t this, inputid_t id)
+{
   this->id = id;
 }
 
-static inline void inputserver_setEpollfd(inputserver_t this, int fd) {
+static inline void
+input_setEpollfd(input_t this, int fd)
+{
   this->epollfd = fd;
 }
 
-static inline void inputserver_setTid(inputserver_t this, pthread_t tid) {
+static inline void
+input_setTid(input_t this, pthread_t tid)
+{
   this->tid = tid;
 }
 
-static inline void inputserver_setMsgcnt(inputserver_t this, int c) {
+static inline void
+input_setMsgcnt(input_t this, int c)
+{
   this->msgcnt = c;
 }
 
-static inline void inputserver_incMsgcnt(inputserver_t this, int c) {
+static inline
+void input_incMsgcnt(input_t this, int c)
+{
   this->msgcnt++;
 }
 
-static inline void inputserver_setNumconn(inputserver_t this, int n) {
+static inline void
+input_setNumconn(input_t this, int n)
+{
   this->numconn = n;
 }
 
-static inline void inputserver_incNumconn(inputserver_t this) {
+static inline void
+input_incNumconn(input_t this) {
   this->numconn++;
 }
 
-static inline void inputserver_setCpumask(inputserver_t this, cpu_set_t cpumask)
+static inline void
+input_setCpumask(input_t this, cpu_set_t cpumask)
 {
   this->cpumask = cpumask;
 }
 
-static void msgbuf_reset(inputserver_msgbuffer_t mb)
+static void
+msgbuf_reset(input_msgbuffer_t mb)
 {
   mb->hdr.raw[0] = 0;
   _Static_assert(sizeof(msghdr_bytes_t)==(sizeof(uint64_t)*1),
 		 "missmatch msg raw size");
   mb->n       = 0;
-  mb->fsrv    = NULL;
+  mb->worker  = NULL;
   mb->qe      = NULL;
 }
 
 
-static void msgbuf_dump(inputserver_msgbuffer_t mb)
+static void
+msgbuf_dump(input_msgbuffer_t mb)
 {
-  fprintf(stderr, "%p:hdr.raw:%lx (funcid:%x datalen:%d) n:%d fsrv:%p qe:%p\n",
-	  mb, mb->hdr.raw[0], mb->hdr.fields.funcid, mb->hdr.fields.datalen,
-	  mb->n, mb->fsrv, mb->qe);
+  fprintf(stderr, "%p:hdr.raw:%lx (workerid:%x datalen:%d) n:%d fsrv:%p qe:%p\n",
+	  mb, mb->hdr.raw[0], mb->hdr.fields.wq.workerid,
+	  mb->hdr.fields.datalen,
+	  mb->n, mb->worker, mb->qe);
 }
 
-static inputserver_connection_t
-inputserver_connection_new(struct sockaddr_storage addr, socklen_t addrlen,
-			  int fd, inputserver_t ss)
+static input_connection_t
+input_connection_new(struct sockaddr_storage addr, socklen_t addrlen,
+			  int fd, input_t input)
 {
-  	inputserver_connection_t co =
-	  malloc(sizeof(struct inputserver_connection));
-	co->addr         = addr;
-	co->addrlen      = addrlen;
-	co->fd           = fd;
-	co->msgcnt       = 0;
+  	input_connection_t co = malloc(sizeof(struct input_connection));
+	co->addr              = addr;
+	co->addrlen           = addrlen;
+	co->fd                = fd;
+	co->msgcnt            = 0;
 	msgbuf_reset(&co->mbuf);
-	co->ss           = ss;
+	co->input             = input;
 	return co;
 }
 
 static void
-inputserver_connection_dump(inputserver_t this, struct inputserver_connection *c) 
+input_connection_dump(input_t this, struct input_connection *c) 
 {
   int connfd = c->fd;
   struct sockaddr *addr = (struct sockaddr *)&(c->addr);
   socklen_t addrlen = c->addrlen;
   int msgcnt = c->msgcnt;
-  void *ss = c->ss;
+  void *input = c->input;
     
   if (verbose(1)) {
-    fprintf(stderr,"%p:ss:%p fd:%d msgcnt:%d sa_fam:%d addrlen:%d addr:",
-	    c,ss, connfd, msgcnt, addr->sa_family, addrlen);
+    fprintf(stderr,"%p:input:%p fd:%d msgcnt:%d sa_fam:%d addrlen:%d addr:",
+	    c,input, connfd, msgcnt, addr->sa_family, addrlen);
     if (addr->sa_family == AF_INET) {
       struct sockaddr_in *iaddr = (struct sockaddr_in *)(addr);
       int iport = ntohs(iaddr->sin_port);
@@ -118,13 +137,13 @@ inputserver_connection_dump(inputserver_t this, struct inputserver_connection *c
   }
 }
 
-static void inputserver_cleanupConnection(inputserver_t this,
-					 inputserver_connection_t co)
+static void
+input_cleanupConnection(input_t this, input_connection_t co)
 {
   struct epoll_event dummyev;
-  int epollfd = inputserver_getEpollfd(this);
-  SSVLP(1,"co:%p \n\t", co);
-  inputserver_connection_dump(this, co);
+  int epollfd = input_getEpollfd(this);
+  IVLP(1,"co:%p \n\t", co);
+  input_connection_dump(this, co);
   if (co->mbuf.n != 0) NYI;  // connection was lost in the middle of a message
   // for backwards compatiblity we use dummy versus NULL see bugs section
   // of man epoll_ctl
@@ -137,34 +156,33 @@ static void inputserver_cleanupConnection(inputserver_t this,
 }
 
 static QueueEntryFindRC_t
-inputserver_findFuncServerAndQueueEntry(inputserver_t this,
-				       union ssbench_msghdr *h,
-				       funcserver_t *fsrv,
-				       queue_entry_t *qe)
+input_findWorkerAndQueueEntry(input_t this, union ssbench_msghdr *h,
+			      worker_t *w, queue_entry_t *qe)
 {
-  funcserver_t tmpfsrv;
+  worker_t tmpw;
   ASSERT(h);
-  uint32_t fid = h->fields.funcid;
+  workerid_t wid = h->fields.wq.workerid;
+  int intwid = wid;
   
-  HASH_FIND_INT(Args.funcServers.hashtable, &fid, tmpfsrv);
+  HASH_FIND_INT(Args.workers.hashtable, &intwid, tmpw);
 
-  if (tmpfsrv == NULL) {
-    // no server found for this id
-    VLPRINT(2, "NO funcserver found for fid=%d in message.\n",fid);
-    *fsrv = NULL;
+  if (tmpw == NULL) {
+    // no worker found for this id
+    VLPRINT(2, "NO worker found for wid=%d in message.\n",wid);
+    *w = NULL;
     *qe   = NULL;
     return Q_NONE;
   }
-  *fsrv = tmpfsrv;
-  return  funcserver_getQueueEntry(tmpfsrv, h, qe);
+  *w = tmpw;
+  return  worker_getQueueEntry(tmpw, h, qe);
 }
 
 
-static void inputserver_serveConnection(inputserver_t this,
-				       inputserver_connection_t co)
+static void
+input_serveConnection(input_t this, input_connection_t co)
 {
   // We got data on the fd our job is to buffer a message to a work
-  // and then let the work processes it.  Given that a socket is a serial
+  // and then let the worker processes it.  Given that a socket is a serial
   // stream of bytes we will assume that messages are contigous and that
   // as single message is destined to a single worker.  A future extention
   // would be to support broadcast and multicast but that is not something
@@ -173,13 +191,13 @@ static void inputserver_serveConnection(inputserver_t this,
   // Each connection object contains the state of the current message begin
   // buffered.  Once a message is released to a work the connections message
   // buffer needs to be reset.
-  int cofd = co->fd;
-  struct inputserver_msgbuffer *comb = &co->mbuf;
-  const int msghdrlen = sizeof(union ssbench_msghdr);
-  int n = comb->n; 
+  int cofd                     = co->fd;
+  struct input_msgbuffer *comb = &co->mbuf;
+  const int msghdrlen          = sizeof(union ssbench_msghdr);
+  int n                        = comb->n; 
   queue_entry_t qe;
   
-  SSVLP(1,"co:%p mb.n=%d\n",co,comb->n);
+  IVLP(1,"co:%p mb.n=%d\n",co,comb->n);
   if ( n < msghdrlen) {
     ASSERT(n<=msghdrlen);
     n += net_nonblocking_readn(cofd, &comb->hdr.buf[n], msghdrlen-n);
@@ -187,33 +205,33 @@ static void inputserver_serveConnection(inputserver_t this,
     if (n<msghdrlen) return; // have not received full msg hdr yet
     // We have a whole message header. Switch over to buffering
     // the data of the message to the correct operator queue
-    SSVLP(1,"msghdr: opid:%x(%02hhx %02hhx %02hhx %02hhx) "
+    IVLP(1,"msghdr: wid:%x(%02hhx %02hhx %02hhx %02hhx) "
 	 "datalen:%u (%02hhx %02hhx %02hhx %02hhx)\n",
-	 comb->hdr.fields.funcid, comb->hdr.buf[0],
+	 comb->hdr.fields.wq.workerid, comb->hdr.buf[0],
 	 comb->hdr.buf[1], comb->hdr.buf[2], comb->hdr.buf[3],
 	 comb->hdr.fields.datalen, comb->hdr.buf[4],
 	 comb->hdr.buf[5], comb->hdr.buf[6], comb->hdr.buf[7]);
     QueueEntryFindRC_t  qerc;
-    funcserver_t fsrv;
-    qerc=inputserver_findFuncServerAndQueueEntry(this, &comb->hdr, &fsrv, &qe);
+    worker_t w;
+    qerc=input_findWorkerAndQueueEntry(this, &comb->hdr, &w, &qe);
     if (qerc == Q_NONE) {
-      VLPRINT(2, "func:%p Q_NONE could not find an funcserver?\n", this); 
+      VLPRINT(2, "input:%p Q_NONE could not find an worker?\n", this); 
       comb->qe = NULL;
     } else if (qerc == Q_MSG2BIG) {
-      EPRINT("func:%p QMSG2BIG\n", this);
+      EPRINT("input:%p worker:%p QMSG2BIG\n", this, w);
       comb->qe = NULL;
     } else if (qerc == Q_FULL) {
       // add code to record and signal back pressure
-      EPRINT("func:%x Q_FULL no space to place message drain\n",
-	     funcserver_getId(fsrv));
+      EPRINT("input:%p w:%p wid:%04hx Q_FULL no space to place message drain\n",
+	     this, w, worker_getId(w));
       comb->qe = NULL;
     } else {
-      comb->qe   = qe;
-      comb->fsrv = fsrv;
+      comb->qe      = qe;
+      comb->worker  = w;
     }
   }
   // buffer data of message to the queue element
-  qe  = comb->qe;
+  qe = comb->qe;
   ASSERT(n>=msghdrlen);
   n -= msghdrlen;      // n = amount of message data read so far
   const int len = comb->hdr.fields.datalen;
@@ -239,15 +257,16 @@ static void inputserver_serveConnection(inputserver_t this,
     
   // message has been received then release to worker
   if (qe != NULL) {
-    funcserver_t fsrv = comb->fsrv;
-    ASSERT(fsrv);
+    worker_t worker = comb->worker;
+    ASSERT(worker);
     qe->len = comb->n - msghdrlen;
     ASSERT(qe->len == len);
     if (verbose(2)) {
-      VLPRINT(2, "Got msg for fsrv:%p id:%x\n", fsrv, funcserver_getId(fsrv));
+      VLPRINT(2, "Got msg for worker:%p id:%04hx\n",
+	      worker, worker_getId(worker));
       hexdump(stderr, qe->data, qe->len);
     }
-    funcserver_putBackQueueEntry(fsrv, &qe);
+    worker_putBackQueueEntry(worker, &qe);
   } else {
     if (verbose(2)) {
       VLPRINT(2,"%s", "Message skipped\n")
@@ -261,36 +280,36 @@ static void inputserver_serveConnection(inputserver_t this,
 
 #define MAX_EVENTS 1024
 // epoll code is based on example from the man page
-static void * inputserver_thread_loop(void * arg)
+static void * input_thread_loop(void * arg)
 {
-  inputserver_t this = arg;
+  input_t this = arg;
   // dummy connection object to use as
   // an epoll handle could have used &listenfd
   // but decided this looks better ;-)
   struct {
     int fd;
   } listenConnection = {
-    .fd =  inputserver_getListenFd(this)
+    .fd =  input_getListenFd(this)
   };
-  int epollfd = inputserver_getEpollfd(this);
+  int epollfd = input_getEpollfd(this);
   pthread_t tid = pthread_self();
-  char *name = inputserver_getName(this);
+  char *name = input_getName(this);
   struct epoll_event ev, events[MAX_EVENTS];
   
-  inputserver_setTid(this, tid);
-  snprintf(name,inputserver_sizeofName(this),"is%d",
-	   inputserver_getPort(this));
+  input_setTid(this, tid);
+  snprintf(name,input_sizeofName(this),"is%d",
+	   input_getPort(this));
   pthread_setname_np(tid, name);
   
   if (verbose(1)) {
     cpu_set_t cpumask;
     int rc = pthread_getaffinity_np(tid, sizeof(cpumask), &cpumask);
     ASSERT(rc==0);
-    SSVLP(1,"%s", "cpuaffinity:");
+    IVLP(1,"%s", "cpuaffinity:");
     cpusetDump(stderr, &cpumask);
   }
 
-  SSVLP(1,"listenConnection:%p:listenFd:%d:epollfd:%d\n",
+  IVLP(1,"listenConnection:%p:listenFd:%d:epollfd:%d\n",
        &listenConnection,listenConnection.fd, epollfd);
 
   ev.events = EPOLLIN;
@@ -301,7 +320,7 @@ static void * inputserver_thread_loop(void * arg)
     exit(EXIT_FAILURE);
   }
 
-  pthread_barrier_wait(&(Args.inputServers.barrier));
+  pthread_barrier_wait(&(Args.inputs.barrier));
   
   for (;;) {
     int nfds = epoll_wait(epollfd, events, MAX_EVENTS, -1);
@@ -312,7 +331,7 @@ static void * inputserver_thread_loop(void * arg)
     
     for (int n = 0; n < nfds; ++n) {
       void * activeConnection = events[n].data.ptr;
-      SSVLP(1,"activeConnection:%p\n", activeConnection);
+      IVLP(1,"activeConnection:%p\n", activeConnection);
       if ( activeConnection == &listenConnection ) {
 	struct sockaddr_storage addr; // in/out parameter
 	// addrlen must be initilized to size of addr in bytes.  It will be
@@ -324,14 +343,14 @@ static void * inputserver_thread_loop(void * arg)
 	  perror("accept");
 	  exit(EXIT_FAILURE);
 	}
-        SSVLP(1,"new connection:%d\n\t", connfd);
+        IVLP(1,"new connection:%d\n\t", connfd);
 	// epoll man page recommends non-blocking io for edgetriggered use 
 	net_setnonblocking(connfd);
 	// create a new connection object for this connection
-	inputserver_connection_t co = inputserver_connection_new(addr, addrlen,
+	input_connection_t co = input_connection_new(addr, addrlen,
 							       connfd, this);
-	inputserver_incNumconn(this);
-	inputserver_connection_dump(this, co);
+	input_incNumconn(this);
+	input_connection_dump(this, co);
 
 	// setup event structure
 	ev.events   = EPOLLIN | EPOLLET | EPOLLHUP | EPOLLRDHUP | EPOLLERR;
@@ -342,37 +361,37 @@ static void * inputserver_thread_loop(void * arg)
 	  exit(EXIT_FAILURE);
 	}
       } else {
-	inputserver_connection_t co = activeConnection;
+	input_connection_t co = activeConnection;
 	uint32_t evnts = events[n].events;
-	SSVLP(1,"activity on connection:%p: events0x%x fd:%d\n",
+	IVLP(1,"activity on connection:%p: events0x%x fd:%d\n",
 	     co, evnts, co->fd);
 	// process each of the events that have occurred on this connection
 	if (evnts & EPOLLIN) {
-	  SSVLP(1,"co:%p fd:%d got EPOLLIN(%x) evnts:%x\n",
+	  IVLP(1,"co:%p fd:%d got EPOLLIN(%x) evnts:%x\n",
 	       co, co->fd, EPOLLIN, evnts);
-	  inputserver_serveConnection(this, co);
+	  input_serveConnection(this, co);
 	  evnts = evnts & ~EPOLLIN;
 	}
 	if (evnts & EPOLLHUP) {
-	  SSVLP(1,"co:%p fd:%d got EPOLLHUP(%x) evnts:%x\n",
+	  IVLP(1,"co:%p fd:%d got EPOLLHUP(%x) evnts:%x\n",
 	       co, co->fd, EPOLLHUP, evnts);
 	  evnts = evnts & ~EPOLLHUP;
 	  NYI;
 	}
 	if (evnts & EPOLLRDHUP) {
-	  SSVLP(1,"connection lost: co:%p fd:%d got EPOLLRDHUP(%x) evnts:%x\n",
+	  IVLP(1,"connection lost: co:%p fd:%d got EPOLLRDHUP(%x) evnts:%x\n",
 	       co, co->fd, EPOLLRDHUP, evnts);
 	  evnts = evnts & ~EPOLLRDHUP;
-	  inputserver_cleanupConnection(this, co);
+	  input_cleanupConnection(this, co);
 	}
 	if (evnts & EPOLLERR) {
-	  SSVLP(1,"co:%p fd:%d got EPOLLERR(%x) evnts:%x",
+	  IVLP(1,"co:%p fd:%d got EPOLLERR(%x) evnts:%x",
 	       co, co->fd, EPOLLERR, evnts);
 	  evnts = evnts & ~EPOLLERR;
 	  NYI;
 	}
 	if (evnts != 0) {
-	  SSVLP(1,"co:%p fd:%d unknown events evnts:%x",
+	  IVLP(1,"co:%p fd:%d unknown events evnts:%x",
 	       co, co->fd, evnts);
 	  ASSERT(evnts==0);
 	}
@@ -382,7 +401,7 @@ static void * inputserver_thread_loop(void * arg)
 }
 
 static void
-inputserver_init(inputserver_t this, int port, int id, cpu_set_t cpumask)
+input_init(input_t this, int port, inputid_t id, cpu_set_t cpumask)
 {
   int rc;
   int fd;
@@ -397,12 +416,12 @@ inputserver_init(inputserver_t this, int port, int id, cpu_set_t cpumask)
   // we are using epoll so we set the listen fd to non-blocking mode
   net_setnonblocking(fd);
   
-  inputserver_setListenFd(this, fd);
-  inputserver_setPort(this, port);
-  inputserver_setId(this, id);
-  inputserver_setMsgcnt(this, 0);
-  inputserver_setNumconn(this, 0); 
-  inputserver_setCpumask(this, cpumask);
+  input_setListenFd(this, fd);
+  input_setPort(this, port);
+  input_setId(this, id);
+  input_setMsgcnt(this, 0);
+  input_setNumconn(this, 0); 
+  input_setCpumask(this, cpumask);
   
   if (net_listen(fd) < 0) {
     EPRINT("ERROR: net_listen: %d:%d", fd, port);
@@ -411,19 +430,19 @@ inputserver_init(inputserver_t this, int port, int id, cpu_set_t cpumask)
   {
     int epollfd = epoll_create1(0);
     ASSERT(epollfd != -1);
-    inputserver_setEpollfd(this,epollfd);
+    input_setEpollfd(this,epollfd);
   }
   
-  if (verbose(2)) inputserver_dump(this, stderr);
+  if (verbose(2)) input_dump(this, stderr);
 
 }
 
 extern void
-inputserver_start(inputserver_t this, bool async)
+input_start(input_t this, bool async)
 {
   pthread_t tid;
   int rc;
-  cpu_set_t cpumask = inputserver_getCpumask(this);
+  cpu_set_t cpumask = input_getCpumask(this);
   
   if (async) {
     pthread_attr_t attr;
@@ -435,7 +454,7 @@ inputserver_start(inputserver_t this, bool async)
     rc = pthread_attr_setaffinity_np(attrp, sizeof(cpumask), &cpumask);
     ASSERT(rc==0);
     // start thread loop
-    rc = pthread_create(&tid, attrp, &inputserver_thread_loop, this);
+    rc = pthread_create(&tid, attrp, &input_thread_loop, this);
     ASSERT(rc==0);
     rc = pthread_attr_destroy(attrp);
     ASSERT(rc==0);
@@ -444,32 +463,32 @@ inputserver_start(inputserver_t this, bool async)
     tid = pthread_self();
     rc = pthread_setaffinity_np(tid, sizeof(cpumask), &cpumask);
     ASSERT(rc==0);
-    inputserver_thread_loop(this);
+    input_thread_loop(this);
   }
 }
 
-inputserver_t
-inputserver_new(int port, int id, cpu_set_t cpumask) {
-  inputserver_t this;
+input_t
+input_new(int port, inputid_t id, cpu_set_t cpumask) {
+  input_t this;
   
-  this = malloc(sizeof(struct inputserver));
+  this = malloc(sizeof(struct input));
   ASSERT(this);
-  inputserver_init(this, port, id, cpumask);  
+  input_init(this, port, id, cpumask);  
   return this;
 }
 
 void
-inputserver_dump(inputserver_t this, FILE *file)
+input_dump(input_t this, FILE *file)
 {
-  fprintf(file, "inputserver:%p id:%d tid:%ld listenFd:%d port:%d\n", this,
-	  inputserver_getId(this),
-	  inputserver_getTid(this),
-	  inputserver_getListenFd(this),
-	  inputserver_getPort(this));
+  fprintf(file, "input:%p id:%hd tid:%ld listenFd:%d port:%d\n", this,
+	  input_getId(this),
+	  input_getTid(this),
+	  input_getListenFd(this),
+	  input_getPort(this));
 }
 
 extern void
-inputserver_destroy(inputserver_t this)
+input_destroy(input_t this)
 {
-  SSVLP(1,"%s", "called\n");
+  IVLP(1,"%s", "called\n");
 }
