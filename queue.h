@@ -3,6 +3,13 @@
 
 typedef struct queue_entry * queue_entry_t;
 typedef struct queue *queue_t;
+
+struct qdesc {  
+  size_t maxmsgsize;
+  size_t qlen;
+  qid_t  count;
+};
+
 struct queue_entry  {
   queue_entry_t next;
   size_t  len;

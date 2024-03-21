@@ -126,20 +126,21 @@ worker_putBackQueueEntry(worker_t this, queue_entry_t *qe)
     
 static void
 worker_init(worker_t this, workerid_t id, const char *path,
-		ssbench_func_t func, size_t maxmsgsize, size_t qlen,
-		outputid_t oid, workerid_t owid, cpu_set_t cpumask)
+	    ssbench_func_t func, struct qdesc *qds, qid_t qdcount,
+	    outputid_t oid, workerid_t owid, cpu_set_t cpumask)
 {
   worker_setId(this, id);
   worker_setTid(this, -1);
-  worker_setMaxmsgsize(this, maxmsgsize);
-  worker_setQlen(this, qlen);
+  //  worker_setMaxmsgsize(this, maxmsgsize);
+  //worker_setQlen(this, qlen);
   worker_setPath(this, path);
   worker_setFunc(this, func);
   worker_setCpumask(this, cpumask);
   worker_setSemid(this, -1);
   worker_setOid(this, oid);
   worker_setOwid(this, owid);
-
+  worker_setNumq(this, qdcount);
+  
   if (oid == ID_NULL) {
     worker_setOutput(this, NULL);
   } else {
@@ -155,26 +156,19 @@ worker_init(worker_t this, workerid_t id, const char *path,
     }
     ASSERT(owid != ID_NULL);
   }
-  queue_init(&(this->queue), maxmsgsize, qlen);
+  //queue_init(&(this->queue), maxmsgsize, qlen);
 
   if (verbose(2)) worker_dump(this, stderr);
 }
 
 worker_t
 worker_new(workerid_t id, const char *path, ssbench_func_t func,
-	   size_t maxmsgsize, int qlen, outputid_t oid, workerid_t owid,
+	   struct qdesc *qds, qid_t qdcount, outputid_t oid, workerid_t owid,
 	   cpu_set_t cpumask) {
   worker_t this;
-  // for each queue entry required we need a queue_entry struct plus
-  // enought bytes for the maximum  size of a single message for this
-  // function.
-  const unsigned int qbytes = ((sizeof(struct queue_entry) +
-				maxmsgsize)
-			       * qlen);
-  this = malloc(sizeof(struct worker) + qbytes);
-
+  this = malloc(sizeof(struct worker) + (qdcount * sizeof(struct queue *)));
   ASSERT(this);
-  worker_init(this, id, path, func, maxmsgsize, qlen, oid, owid, cpumask);
+  worker_init(this, id, path, func, qds, qdcount, oid, owid, cpumask);
   return this;
 }
 

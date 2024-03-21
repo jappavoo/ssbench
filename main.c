@@ -249,22 +249,14 @@ addOutput(char **argv, int argc, char *optarg)
   return true;
 }
 
-struct qdesc {
-  size_t         maxmsgsize;
-  size_t         len;
-  uint16_t       count;
-};
-
-#if 0
 static bool
-parseQSpec(char *str, struct qdesc **qds)
+parseQSpec(char *str, struct qdesc **qds, int *n)
 {
-#if 0
-  char         *sptr, *ptr;
+  char         *sptr, *ptr, *tmpstr, *endptr;
   size_t        maxmsgsize;
   size_t        len;
-  uint16_t      num;
-  int           count = 0; 
+  qid_t         count;
+  int           num = 0; 
   struct qdesc *qd    = NULL;;
   ptr = str;
 
@@ -272,7 +264,7 @@ parseQSpec(char *str, struct qdesc **qds)
     tmpstr = strtok_r(ptr, ":", &sptr);
     if (tmpstr == NULL) return false;
     errno = 0;
-    num  = strtol(tmpstr, &endptr, 0);
+    count  = strtol(tmpstr, &endptr, 0);
     if (endptr == tmpstr || errno != 0) break;
     
     tmpstr = strtok_r(NULL, ":", &sptr);
@@ -281,18 +273,29 @@ parseQSpec(char *str, struct qdesc **qds)
     if (endptr == tmpstr || errno != 0) break;
     
     tmpstr = strtok_r(NULL, ",", &sptr);
-    if (tmpstr == NULL) return break;
+    if (tmpstr == NULL)  break;
     errno = 0;   // as per man page notes for strtod or strtol
     len = strtol(tmpstr, &endptr, 0);
     if (endptr == tmpstr || errno != 0) break;
-
+    VLPRINT(2, "%d:count:%hd maxmsgsize:%lu len:%lu\n",
+	    num, count, maxmsgsize, len);
     ptr = NULL;
-  } while (sptr != '\0');
-  if (sptr) {}
-#endif
-  return false;    
+    if (num==0) qd = malloc(sizeof(struct qdesc));
+    else qd = reallocarray(qd, num+1, sizeof(struct qdesc));
+    qd[num].count      = count;
+    qd[num].maxmsgsize = maxmsgsize;
+    qd[num].qlen       = len;
+    num++;  
+  } while (*sptr != '\0');
+  if (*sptr != 0) {
+    // error must have happened
+    free(qd);
+    return false;
+  }
+  *qds = qd;
+  *n   = num;  
+  return true;    
 }
-#endif
 
 static bool
 addWorker(char **argv, int argc, char *optarg)
@@ -326,20 +329,15 @@ addWorker(char **argv, int argc, char *optarg)
 	   path, func);
   }
 
-#if 0
-  char *qstr;
-  tmpstr = strtok_r(NULL, "[", &sptr);
+#if 1
+  struct qdesc *qds;
+  int qdcount;
+  tmpstr = strtok_r(NULL, "[]", &sptr);
   if (tmpstr == NULL) {
     EPRINT("%s", "ERROR: queue specification must be within square brackets\n");
     return false;
   }
-  qstr = tmpstr;
-  tmpstr = strtok_r(NULL, "]", &sptr);
-  if (tmpstr == NULL) {
-    EPRINT("%s", "ERROR: queue specification must be within square brackets\n");
-    return false;
-  }  
-  //  if (parseQSpec(qstr, &qdesc) == false) return false;
+  if (parseQSpec(tmpstr, &qds, &qdcount) == false) return false;
 #else
   size_t maxmsgsize;
   tmpstr = strtok_r(NULL, ",", &sptr);
@@ -387,14 +385,15 @@ addWorker(char **argv, int argc, char *optarg)
     oid  = ID_NULL;
     owid = ID_NULL; 
   }
-  
+#if 0
   VLPRINT(2, "id:%04x,path:%s,func:%p,maxmsgsize:%lu,qlen:%lu,"
 	  "oid:%04x,owid=%04x,cpumask:",
 	  id, path, func, maxmsgsize, qlen, oid, owid);
   if (verbose(2)) {
     cpusetDump(stderr, &cpumask);
   }
-  w = worker_new(id, path, func, maxmsgsize, qlen, oid, owid, cpumask);
+#endif    
+  w = worker_new(id, path, func, qds, qdcount,oid, owid, cpumask);
   HASH_ADD_INT(Args.workers.hashtable, id, w); 
   Args.workerCnt++;
   return true;
