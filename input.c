@@ -213,7 +213,7 @@ input_serveConnection(input_t this, input_connection_t co)
 	 comb->hdr.buf[5], comb->hdr.buf[6], comb->hdr.buf[7]);
     QueueEntryFindRC_t  qerc;
     worker_t w;
-    qerc=input_findWorkerAndQueueEntry(this, &comb->hdr, &w, &qe);
+    qerc=input_findWorkerAndQueueEntry(this,  &comb->hdr, &w, &qe);
     if (qerc == Q_NONE) {
       VLPRINT(2, "input:%p Q_NONE could not find an worker?\n", this); 
       comb->qe = NULL;
@@ -266,7 +266,7 @@ input_serveConnection(input_t this, input_connection_t co)
 	      worker, worker_getId(worker));
       hexdump(stderr, qe->data, qe->len);
     }
-    worker_putBackQueueEntry(worker, &qe);
+    worker_putBackQueueEntry(worker, &comb->hdr, &qe);
   } else {
     if (verbose(2)) {
       VLPRINT(2,"%s", "Message skipped\n")

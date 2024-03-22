@@ -86,7 +86,9 @@ struct Args {
   unsigned int totalcpus;
   unsigned int availcpus;
   pid_t        pid;
-  
+
+  queue_scanstate_init_func_t queue_scanstate_init;
+  queue_scanfull_func_t       queue_scanfull;
   struct {
     input_t           hashtable;
     pthread_barrier_t barrier;

@@ -10,7 +10,8 @@ queue_entry_t queue_next(queue_t this, queue_entry_t qe)
   return (queue_entry_t) ptr;
 }
 
-extern void queue_init(queue_t this, size_t maxentrysize, size_t qlen)
+extern void
+queue_init(queue_t this, size_t maxentrysize, size_t qlen)
 {
   this->maxentrysize = maxentrysize;
   ASSERT(qlen > 0);
@@ -46,14 +47,16 @@ extern void queue_init(queue_t this, size_t maxentrysize, size_t qlen)
   }
 }
 
-void queue_entry_dump(queue_entry_t qe, FILE *file)
+void
+queue_entry_dump(queue_entry_t qe, FILE *file)
 {
   fprintf(file, "  qe:%p len:%lu next:%p data:", qe, qe->len, qe->next);
   hexdump(file, qe->data, qe->len);
   if (qe->len==0) fprintf(stderr, "\n");
 }
 
-void queue_dump(queue_t this, FILE *file)
+void
+queue_dump(queue_t this, FILE *file)
 {
   size_t qesize = sizeof(struct queue_entry) + this->maxentrysize;
   fprintf(file, "queue:%p maxentrysize:%lu qlen:%lu sizeof(qe+data)=%lu(0x%lx) "
@@ -73,4 +76,16 @@ void queue_dump(queue_t this, FILE *file)
       queue_entry_dump(tmp, file);
     }
   }
+}
+
+void
+queue_desc_dump(FILE *file, queue_desc_t qds, qid_t n)
+{
+  fprintf(file, "[");
+  for (qid_t i=0; i<n; i++) {
+    fprintf(file, "%hd:%lu:%lu",
+	    qds[i].count, qds[i].maxentrysize, qds[i].qlen);
+    if (i<(n-1)) fprintf(stderr, ",");
+  }
+  fprintf(file, "]");
 }

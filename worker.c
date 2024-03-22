@@ -44,9 +44,9 @@ worker_setFunc(worker_t this, ssbench_func_t func)
 }
 
 static inline void
-worker_setMaxmsgsize(worker_t this, size_t maxmsgsize)
+worker_setNumqs(worker_t this, qid_t n)
 {
-  this->maxmsgsize = maxmsgsize;
+  this->numqs = n;
 }
 
 static inline void
@@ -73,6 +73,16 @@ worker_setOutput(worker_t this, output_t output)
   this->output = output;
 }
 
+static void
+worker_dump_queues(worker_t this, FILE *file)
+{
+  qid_t n = worker_getNumqs(this);
+
+  for (qid_t i=0; i<n; i++) {
+    queue_dump(worker_getQueue(this,i),stderr);
+  }
+}
+
 extern void
 worker_dump(worker_t this, FILE *file)
 {
@@ -96,24 +106,36 @@ worker_dump(worker_t this, FILE *file)
   }
   cpu_set_t mask=worker_getCpumask(this);
   cpusetDump(stderr, &mask);
-  queue_dump(worker_getQueue(this),stderr);
+  worker_dump_queues(this, stderr); 
 }
 
 extern QueueEntryFindRC_t
 worker_getQueueEntry(worker_t this, union ssbench_msghdr *h, queue_entry_t *qe)
 {
-  queue_t q  = worker_getQueue(this);
-  size_t len = h->fields.datalen;
+  qid_t   qidx = h->fields.wq.qidx;
+  size_t  len  = h->fields.datalen;
+  queue_t q;
 
+  if (qidx < 0 || qidx >= worker_getNumqs(this)) {
+    return Q_BADQIDX;
+  }
+  q = worker_getQueue(this, qidx);
   return queue_getEmptyEntry(q, true, &len, qe);
 }
 
 extern void
-worker_putBackQueueEntry(worker_t this, queue_entry_t *qe)
+worker_putBackQueueEntry(worker_t this, union ssbench_msghdr *h,
+			 queue_entry_t *qe)
 {
-  queue_t q = worker_getQueue(this);
+  qid_t   numqs = worker_getNumqs(this);
+  qid_t   qidx  = h->fields.wq.qidx;
   semid_t semid = worker_getSemid(this);
-  queue_putBackFullEntry(q, *qe);
+  queue_t q;
+
+  ASSERT(qidx>=0 && qidx < numqs);
+  q = worker_getQueue(this, qidx);
+  
+  queue_putBackFullEntry(q,  *qe);
   *qe = NULL;
  retry:
   int rc = semop(semid, &semsignal, 1);
@@ -123,10 +145,10 @@ worker_putBackQueueEntry(worker_t this, queue_entry_t *qe)
     EEXIT();
   }
 }
-    
+
 static void
 worker_init(worker_t this, workerid_t id, const char *path,
-	    ssbench_func_t func, struct qdesc *qds, qid_t qdcount,
+	    ssbench_func_t func, queue_desc_t qds, qid_t qdcount,
 	    outputid_t oid, workerid_t owid, cpu_set_t cpumask)
 {
   worker_setId(this, id);
@@ -139,7 +161,7 @@ worker_init(worker_t this, workerid_t id, const char *path,
   worker_setSemid(this, -1);
   worker_setOid(this, oid);
   worker_setOwid(this, owid);
-  worker_setNumq(this, qdcount);
+  worker_setNumqs(this, qdcount);
   
   if (oid == ID_NULL) {
     worker_setOutput(this, NULL);
@@ -157,13 +179,13 @@ worker_init(worker_t this, workerid_t id, const char *path,
     ASSERT(owid != ID_NULL);
   }
   //queue_init(&(this->queue), maxmsgsize, qlen);
-
+  for (qid_t 
   if (verbose(2)) worker_dump(this, stderr);
 }
 
 worker_t
 worker_new(workerid_t id, const char *path, ssbench_func_t func,
-	   struct qdesc *qds, qid_t qdcount, outputid_t oid, workerid_t owid,
+	   queue_desc_t qds, qid_t qdcount, outputid_t oid, workerid_t owid,
 	   cpu_set_t cpumask) {
   worker_t this;
   this = malloc(sizeof(struct worker) + (qdcount * sizeof(struct queue *)));
@@ -175,20 +197,25 @@ worker_new(workerid_t id, const char *path, ssbench_func_t func,
 static void *
 worker_thread_loop(void * arg)
 {
-  worker_t this       = arg;
-  workerid_t id       = worker_getId(this);
-  pthread_t tid       = pthread_self();
-  char *name          = worker_getName(this);
-  unsigned int nsize  = worker_sizeofName(this);
-  const char *path    = worker_getPath(this);
-  queue_t iq          = worker_getQueue(this);
-  ssbench_func_t func = worker_getFunc(this);
-  output_t output     = worker_getOutput(this);
-  outputid_t owid     = worker_getOwid(this);
-  queue_entry_t iqe, oqe;
+  worker_t          this       = arg;
+  workerid_t        id         = worker_getId(this);
+  pthread_t         tid        = pthread_self();
+  char             *name       = worker_getName(this);
+  unsigned int      nsize      = worker_sizeofName(this);
+  const char       *path       = worker_getPath(this);
+  ssbench_func_t    func       = worker_getFunc(this);
+  output_t          output     = worker_getOutput(this);
+  outputid_t        owid       = worker_getOwid(this);
+  queue_t          *queues     = worker_getQueues(this);
+  qid_t             numqs      = worker_getNumqs(this);
+  queue_scanstate_t qscanstate = Args.queue_scanstate_init();
+  queue_t           iq         = NULL;
+  queue_entry_t         iqe, oqe;
+  qid_t                 qidx;
   union ssbench_msghdr *omh;
-  size_t olen, flen;
-  uint8_t *odata;
+  size_t                olen, flen;
+  uint8_t              *odata;
+
   int rc;
   
   worker_setTid(this, tid);
@@ -227,7 +254,9 @@ worker_thread_loop(void * arg)
     }
     WVLP(2, "%s", "AWAKE\n");
     // grab a full entry -- must exist if semaphore was signaled
-    queue_getFullEntry(iq, &iqe);
+    qscanstate = Args.queue_scanfull(queues, numqs, &qidx, &iqe, qscanstate);
+    iq = queues[qidx];
+    //    queue_getFullEntry(iq, &iqe);
     ASSERT(iqe);
     if (output != NULL) {
       if (verbose(2)) {

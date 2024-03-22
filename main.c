@@ -20,6 +20,9 @@ static void usage(char *name)
 	  name);
 }
 
+extern queue_scanstate_init_func_t rr_queue_scanstate_init;
+extern queue_scanfull_func_t rr_queue_scanfull;
+
 struct Args Args = {
   .inputCnt          = 0,
   .outputCnt         = 0,
@@ -28,6 +31,8 @@ struct Args Args = {
   .totalcpus         = 0,
   .availcpus         = 0,
   .pid               = 0,
+  .queue_scanstate_init = NULL,
+  .queue_scanfull       = NULL,
   .inputs.hashtable  = NULL,
   .outputs.hashtable = NULL,
   .workers.hashtable = NULL
@@ -73,6 +78,7 @@ dumpArgs()
   fprintf(stderr, "Args.pid=%d Args.totalcpus=%u, Args.availcpus=%u\n"
 	  "Args.inputCnt=%d Args.outputCnt=%d Args.workerCnt=%d\n"
 	  "Args.inputs.ht=%p, Args.outputs.ht=%p Args.workers.ht=%p\n"
+	  "Args.queue_scanstate_init=%p, Args.queue_scanfull=%p\n"
 	  "Args.verbose=%d\n",
 	  Args.pid, Args.totalcpus, Args.availcpus,
 	  Args.inputCnt,
@@ -81,6 +87,7 @@ dumpArgs()
 	  Args.inputs.hashtable,
 	  Args.outputs.hashtable,
 	  Args.workers.hashtable,
+	  Args.queue_scanstate_init, Args.queue_scanfull,
 	  Args.verbose);
   dumpInputs();
   dumpOutputs();
@@ -250,14 +257,14 @@ addOutput(char **argv, int argc, char *optarg)
 }
 
 static bool
-parseQSpec(char *str, struct qdesc **qds, int *n)
+parseQSpec(char *str, queue_desc_t *qds, qid_t *n)
 {
   char         *sptr, *ptr, *tmpstr, *endptr;
-  size_t        maxmsgsize;
-  size_t        len;
+  size_t        maxentrysize;
+  size_t        qlen;
   qid_t         count;
-  int           num = 0; 
-  struct qdesc *qd    = NULL;;
+  qid_t         num = 0; 
+  queue_desc_t  qd  = NULL;;
   ptr = str;
 
   do {
@@ -269,22 +276,22 @@ parseQSpec(char *str, struct qdesc **qds, int *n)
     
     tmpstr = strtok_r(NULL, ":", &sptr);
     errno = 0;   // as per man page notes for strtod or strtol
-    maxmsgsize = strtol(tmpstr, &endptr, 0);
+    maxentrysize = strtol(tmpstr, &endptr, 0);
     if (endptr == tmpstr || errno != 0) break;
     
     tmpstr = strtok_r(NULL, ",", &sptr);
     if (tmpstr == NULL)  break;
     errno = 0;   // as per man page notes for strtod or strtol
-    len = strtol(tmpstr, &endptr, 0);
+    qlen = strtol(tmpstr, &endptr, 0);
     if (endptr == tmpstr || errno != 0) break;
-    VLPRINT(2, "%d:count:%hd maxmsgsize:%lu len:%lu\n",
-	    num, count, maxmsgsize, len);
+    VLPRINT(2, "%d:count:%hd maxentrysize:%lu qlen:%lu\n",
+	    num, count, maxentrysize, qlen);
     ptr = NULL;
-    if (num==0) qd = malloc(sizeof(struct qdesc));
-    else qd = reallocarray(qd, num+1, sizeof(struct qdesc));
-    qd[num].count      = count;
-    qd[num].maxmsgsize = maxmsgsize;
-    qd[num].qlen       = len;
+    if (num==0) qd = malloc(sizeof(struct queue_desc));
+    else qd = reallocarray(qd, num+1, sizeof(struct queue_desc));
+    qd[num].count        = count;
+    qd[num].maxentrysize = maxentrysize;
+    qd[num].qlen         = qlen;
     num++;  
   } while (*sptr != '\0');
   if (*sptr != 0) {
@@ -329,30 +336,14 @@ addWorker(char **argv, int argc, char *optarg)
 	   path, func);
   }
 
-#if 1
-  struct qdesc *qds;
-  int qdcount;
+  queue_desc_t qds;
+  qid_t qdcount;
   tmpstr = strtok_r(NULL, "[]", &sptr);
   if (tmpstr == NULL) {
     EPRINT("%s", "ERROR: queue specification must be within square brackets\n");
     return false;
   }
   if (parseQSpec(tmpstr, &qds, &qdcount) == false) return false;
-#else
-  size_t maxmsgsize;
-  tmpstr = strtok_r(NULL, ",", &sptr);
-  if (tmpstr == NULL) return false;
-  errno = 0;   // as per man page notes for strtod or strtol
-  maxmsgsize = strtod(tmpstr, &endptr);
-  if (endptr == tmpstr || errno != 0) return false;
-  
-  size_t qlen;
-  tmpstr = strtok_r(NULL, ",", &sptr);
-  if (tmpstr == NULL) return false;
-  errno = 0;   // as per man page notes for strtod or strtol
-  qlen = strtod(tmpstr, &endptr);
-  if (endptr == tmpstr || errno != 0) return false;
-#endif
 
   outputid_t oid;
   workerid_t owid;
@@ -385,14 +376,13 @@ addWorker(char **argv, int argc, char *optarg)
     oid  = ID_NULL;
     owid = ID_NULL; 
   }
-#if 0
-  VLPRINT(2, "id:%04x,path:%s,func:%p,maxmsgsize:%lu,qlen:%lu,"
-	  "oid:%04x,owid=%04x,cpumask:",
-	  id, path, func, maxmsgsize, qlen, oid, owid);
+  VLPRINT(2, "id:%04x,path:%s,func:%p,oid:%04x,owid:%04x,queues:",
+	  id, path, func, oid, owid);
   if (verbose(2)) {
+    queue_desc_dump(stderr, qds, qdcount);
+    VLPRINT(2, "%s", ",cpumask:")
     cpusetDump(stderr, &cpumask);
   }
-#endif    
   w = worker_new(id, path, func, qds, qdcount,oid, owid, cpumask);
   HASH_ADD_INT(Args.workers.hashtable, id, w); 
   Args.workerCnt++;
@@ -406,9 +396,11 @@ processArgs(int argc, char **argv)
 
   unsigned int  cpu, node;
 
-  Args.pid       = getpid();
-  Args.totalcpus = get_nprocs_conf();
-  Args.availcpus = get_nprocs();
+  Args.pid                  = getpid();
+  Args.queue_scanstate_init = rr_queue_scanstate_init;
+  Args.queue_scanfull       = rr_queue_scanfull;
+  Args.totalcpus            = get_nprocs_conf();
+  Args.availcpus            = get_nprocs();
   
   getcpu(&cpu, &node);
 

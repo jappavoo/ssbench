@@ -1,4 +1,4 @@
-SRCS := main.c input.c output.c queue.c worker.c func.c net.c hexdump.c misc.c
+SRCS := main.c input.c output.c queue.c worker.c func.c net.c hexdump.c misc.c rr_queue_scan.c
 OBJS := $(SRCS:%.c=%.o) ext/tsclog/tsclog.o
 FUNCSRCS := stdout.c sleep.c copy.c
 FUNCSOS := $(FUNCSRCS:%.c=%.so) 

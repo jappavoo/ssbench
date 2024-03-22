@@ -1,11 +1,22 @@
 #ifndef __QUEUE_H__
 #define __QUEUE_H__
 
+typedef struct queue_desc * queue_desc_t;
 typedef struct queue_entry * queue_entry_t;
 typedef struct queue *queue_t;
+typedef void * queue_scanstate_t;
 
-struct qdesc {  
-  size_t maxmsgsize;
+typedef queue_scanstate_t queue_scanstate_init_func(void);
+typedef queue_scanstate_t queue_scanfull_func(queue_t queues[],
+					      qid_t   n,
+					      qid_t   *qidx,
+					      queue_entry_t *qe,
+					      queue_scanstate_t ss);
+typedef queue_scanstate_init_func * queue_scanstate_init_func_t;
+typedef queue_scanfull_func * queue_scanfull_func_t;
+
+struct queue_desc {  
+  size_t maxentrysize;
   size_t qlen;
   qid_t  count;
 };
@@ -30,8 +41,9 @@ struct queue {
 
 typedef enum  {
   Q_NONE     =  0,
-  Q_FULL     = -1,
-  Q_MSG2BIG  = -2,
+  Q_BADQIDX  = -1,
+  Q_FULL     = -2,
+  Q_MSG2BIG  = -3,
   Q_FOUND    =  1
 } QueueEntryFindRC_t;
 
@@ -137,7 +149,6 @@ static bool queue_putBackEmptyEntry(queue_t this, queue_entry_t qe)
 
 extern void queue_init(queue_t this, size_t maxentrysize, size_t qlen);
 extern void queue_dump(queue_t this, FILE *file);
-
-
+extern void queue_desc_dump(FILE *file, queue_desc_t qds, qid_t n);
 
 #endif

@@ -19,7 +19,7 @@ struct worker {
   workerid_t      owid;
   qid_t           numqs;
   // this must the last field 
-  struct queue   *queues[];
+  struct queue *  queues[];
 };
 // public getters
 static inline workerid_t worker_getId(worker_t this) {
@@ -55,8 +55,15 @@ static inline semid_t worker_getSemid(worker_t this) {
 static inline cpu_set_t worker_getCpumask(worker_t this) {
   return this->cpumask;
 }
+static inline qid_t worker_getNumqs(worker_t this) {
+  return this->numqs;
+}
+static inline queue_t * worker_getQueues(worker_t this)
+{
+  return this->queues;
+}
 static inline queue_t worker_getQueue(worker_t this, qid_t i) {
-  return &(this->queues[i]);
+  return this->queues[i];
 }
 static inline char * worker_getName(worker_t this) {
   return this->name;
@@ -68,7 +75,7 @@ static inline unsigned int worker_sizeofName(worker_t this) {
 // new func server 
 extern worker_t worker_new(workerid_t id, const char * path,
 			   ssbench_func_t func,
-			   struct qdesc *qds, qid_t qdcount,
+			   queue_desc_t qds, qid_t qdcount,
 			   outputid_t oid, workerid_t owid,
 			   cpu_set_t cpumask);
 
@@ -77,7 +84,9 @@ extern void worker_dump(worker_t this, FILE *file);
 extern QueueEntryFindRC_t worker_getQueueEntry(worker_t this,
 					       union ssbench_msghdr *h,
 					       queue_entry_t *qe);
-extern void worker_putBackQueueEntry(worker_t this, queue_entry_t *qe);
+extern void worker_putBackQueueEntry(worker_t this,
+				     union ssbench_msghdr *h,
+				     queue_entry_t *qe);
 
 extern void worker_start(worker_t this, bool async);
 extern void worker_destroy(worker_t this);
