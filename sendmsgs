@@ -2,11 +2,9 @@
 
 port=${port:-42421}
 
-
-while read op data
+while read w q data
 do
-	op=$((16#$op))
-	len=${#data}
-        ./msghdr $op $len
-	echo -n $data
+    len=${#data}
+    ./msghdr $w $q $len
+    echo -n $data
 done
