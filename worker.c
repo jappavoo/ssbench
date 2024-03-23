@@ -116,7 +116,7 @@ worker_getQueueEntry(worker_t this, union ssbench_msghdr *h, queue_entry_t *qe)
   size_t  len  = h->fields.datalen;
   queue_t q;
 
-  if (qidx < 0 || qidx >= worker_getNumqs(this)) {
+  if (qidx < QID_MIN || qidx >= worker_getNumqs(this)) {
     return Q_BADQIDX;
   }
   q = worker_getQueue(this, qidx);
@@ -132,7 +132,7 @@ worker_putBackQueueEntry(worker_t this, union ssbench_msghdr *h,
   semid_t semid = worker_getSemid(this);
   queue_t q;
 
-  ASSERT(qidx>=0 && qidx < numqs);
+  ASSERT(qidx >= QID_MIN && qidx < numqs);
   q = worker_getQueue(this, qidx);
   
   queue_putBackFullEntry(q,  *qe);
@@ -148,20 +148,20 @@ worker_putBackQueueEntry(worker_t this, union ssbench_msghdr *h,
 
 static void
 worker_init(worker_t this, workerid_t id, const char *path,
-	    ssbench_func_t func, queue_desc_t qds, qid_t qdcount,
+	    ssbench_func_t func, qid_t numqs,
 	    outputid_t oid, workerid_t owid, cpu_set_t cpumask)
 {
   worker_setId(this, id);
   worker_setTid(this, -1);
-  //  worker_setMaxmsgsize(this, maxmsgsize);
-  //worker_setQlen(this, qlen);
   worker_setPath(this, path);
   worker_setFunc(this, func);
   worker_setCpumask(this, cpumask);
   worker_setSemid(this, -1);
   worker_setOid(this, oid);
   worker_setOwid(this, owid);
-  worker_setNumqs(this, qdcount);
+  worker_setNumqs(this, numqs);
+
+  ASSERT(numqs <= QID_MAX);
   
   if (oid == ID_NULL) {
     worker_setOutput(this, NULL);
@@ -178,8 +178,6 @@ worker_init(worker_t this, workerid_t id, const char *path,
     }
     ASSERT(owid != ID_NULL);
   }
-  //queue_init(&(this->queue), maxmsgsize, qlen);
-  for (qid_t 
   if (verbose(2)) worker_dump(this, stderr);
 }
 
@@ -188,9 +186,37 @@ worker_new(workerid_t id, const char *path, ssbench_func_t func,
 	   queue_desc_t qds, qid_t qdcount, outputid_t oid, workerid_t owid,
 	   cpu_set_t cpumask) {
   worker_t this;
-  this = malloc(sizeof(struct worker) + (qdcount * sizeof(struct queue *)));
+  queue_t *queues = NULL;
+  qid_t    numqs  = 0;
+  qid_t    qi     = QID_MIN;
+  qid_t    qdi;
+
+  for (qdi = 0; qdi < qdcount; qi++) {
+    numqs += qds[qdi].count;
+  }
+  ASSERT(numqs <= QID_MAX);
+
+  this = malloc(sizeof(struct worker) + (numqs * sizeof(struct queue *)));  
   ASSERT(this);
-  worker_init(this, id, path, func, qds, qdcount, oid, owid, cpumask);
+
+  queues = worker_getQueues(this);
+  
+  for (qdi = 0;  qdi < qdcount; qi++) {
+    qid_t  count        = qds[qdi].count;
+    size_t maxentrysize = qds[qdi].maxentrysize;
+    size_t qlen         = qds[qdi].qlen;
+    for (qid_t qdj = 0; qdj < count; qdj++) {
+      queue_t q = malloc(sizeof(struct queue) +
+			 ((sizeof(struct queue_entry) + maxentrysize) * qlen));
+      ASSERT(q);
+      queue_init(q, maxentrysize, qlen);
+      queues[qi] = q;
+      qi++;
+    }
+  }
+  ASSERT(numqs == qi);
+  
+  worker_init(this, id, path, func, numqs, oid, owid, cpumask);
   return this;
 }
 
@@ -327,12 +353,18 @@ extern void
 worker_destroy(worker_t this)
 {
   // FIXME: cleanup properly
-  int semid = worker_getSemid(this);
-
+  int      semid  = worker_getSemid(this);
+  qid_t    numqs  = worker_getNumqs(this);
+  queue_t *queues = worker_getQueues(this);
+  
   WVLP(1, "%s", "called\n");
   
   if (semid!=-1) {
     int rc = semctl(semid, 0, IPC_RMID);
     if (rc != 0) perror("IPC_RMID");
+  }
+  
+  for (qid_t qi=QID_MIN; qi<numqs; qi++) {
+    free(queues[qi]);
   }
 }

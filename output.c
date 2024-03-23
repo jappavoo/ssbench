@@ -170,7 +170,13 @@ void output_start(output_t this, bool async)
 extern void
 output_destroy(output_t this)
 {
+  int semid = output_getSemid(this);
   OVLP(1,"%s", "called\n");
+
+  if (semid!=-1) {
+    int rc = semctl(semid, 0, IPC_RMID);
+    if (rc != 0) perror("IPC_RMID");
+  }
 }
 
 static void

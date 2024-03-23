@@ -23,7 +23,7 @@ typedef ssbenchid_t  workerid_t;
 typedef ssbenchid_t  qid_t;
 #define QID_MIN ((qid_t)0)
 #define QID_MAX ((qid_t)INT16_MAX)
-#define QID_ISVALID(qid) ((qid >= QID_MIN) && (qid <= QID_MAX))
+#define QID_ISVALID(qid) ((qid >= QID_MIN) && (qid < QID_MAX))
 
 // we use UT_HASH_INT so hash ids must be integer in size
 typedef int hashid_t;
