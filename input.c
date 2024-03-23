@@ -326,6 +326,7 @@ static void * input_thread_loop(void * arg)
     int nfds = epoll_wait(epollfd, events, MAX_EVENTS, -1);
     if (nfds == -1) {
       perror("epoll_wait");
+      if (errno == EINTR) continue;
       exit(EXIT_FAILURE);
     }
     

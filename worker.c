@@ -191,7 +191,7 @@ worker_new(workerid_t id, const char *path, ssbench_func_t func,
   qid_t    qi     = QID_MIN;
   qid_t    qdi;
 
-  for (qdi = 0; qdi < qdcount; qi++) {
+  for (qdi = 0; qdi < qdcount; qdi++) {
     numqs += qds[qdi].count;
   }
   ASSERT(numqs <= QID_MAX);
@@ -201,7 +201,7 @@ worker_new(workerid_t id, const char *path, ssbench_func_t func,
 
   queues = worker_getQueues(this);
   
-  for (qdi = 0;  qdi < qdcount; qi++) {
+  for (qdi = 0;  qdi < qdcount; qdi++) {
     qid_t  count        = qds[qdi].count;
     size_t maxentrysize = qds[qdi].maxentrysize;
     size_t qlen         = qds[qdi].qlen;

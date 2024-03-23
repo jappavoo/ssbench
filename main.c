@@ -20,22 +20,27 @@ static void usage(char *name)
 	  name);
 }
 
-extern queue_scanstate_init_func_t rr_queue_scanstate_init;
-extern queue_scanfull_func_t rr_queue_scanfull;
+extern queue_scanstate_t rr_queue_scanstate_init(void);
+extern queue_scanstate_t rr_queue_scanfull(queue_t qs[], qid_t n,
+					   qid_t *idx, queue_entry_t *qe,
+					   queue_scanstate_t ss);
+
+//extern queue_scanstate_init_func_t rr_queue_scanstate_init;
+//extern queue_scanfull_func_t rr_queue_scanfull;
 
 struct Args Args = {
-  .inputCnt          = 0,
-  .outputCnt         = 0,
-  .workerCnt         = 0,
-  .verbose           = 0,
-  .totalcpus         = 0,
-  .availcpus         = 0,
-  .pid               = 0,
+  .inputCnt             = 0,
+  .outputCnt            = 0,
+  .workerCnt            = 0,
+  .verbose              = 0,
+  .totalcpus            = 0,
+  .availcpus            = 0,
+  .pid                  = 0,
   .queue_scanstate_init = NULL,
   .queue_scanfull       = NULL,
-  .inputs.hashtable  = NULL,
-  .outputs.hashtable = NULL,
-  .workers.hashtable = NULL
+  .inputs.hashtable     = NULL,
+  .outputs.hashtable    = NULL,
+  .workers.hashtable    = NULL
 };
 
 static void
@@ -380,8 +385,9 @@ addWorker(char **argv, int argc, char *optarg)
 	  id, path, func, oid, owid);
   if (verbose(2)) {
     queue_desc_dump(stderr, qds, qdcount);
-    VLPRINT(2, "%s", ",cpumask:")
+    VLPRINT(2, "%s",",cpumask:")
     cpusetDump(stderr, &cpumask);
+    VLPRINT(2, "%s", "\n");
   }
   w = worker_new(id, path, func, qds, qdcount,oid, owid, cpumask);
   HASH_ADD_INT(Args.workers.hashtable, id, w); 
