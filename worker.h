@@ -17,6 +17,7 @@ struct worker {
   hashid_t        id;
   outputid_t      oid;
   workerid_t      owid;
+  qid_t           oqid;
   qid_t           numqs;
   // this must the last field 
   struct queue *  queues[];
@@ -30,6 +31,9 @@ static inline outputid_t worker_getOid(worker_t this) {
 }
 static inline workerid_t worker_getOwid(worker_t this) {
   return this->owid;
+}
+static inline qid_t worker_getOqid(worker_t this) {
+  return this->oqid;
 }
 static inline output_t worker_getOutput(worker_t this) {
   return this->output;
@@ -76,7 +80,7 @@ static inline unsigned int worker_sizeofName(worker_t this) {
 extern worker_t worker_new(workerid_t id, const char * path,
 			   ssbench_func_t func,
 			   queue_desc_t qds, qid_t qdcount,
-			   outputid_t oid, workerid_t owid,
+			   outputid_t oid, workerid_t owid, qid_t oqid,
 			   cpu_set_t cpumask);
 
 // core moth+ods

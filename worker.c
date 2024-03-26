@@ -26,6 +26,12 @@ worker_setOwid(worker_t this, workerid_t owid)
 }
 
 static inline void
+worker_setOqid(worker_t this, qid_t oqid)
+{
+  this->oqid = oqid;
+}
+
+static inline void
 worker_setTid(worker_t this, pthread_t tid)
 {
   this->tid = tid;
@@ -87,7 +93,7 @@ extern void
 worker_dump(worker_t this, FILE *file)
 {
   fprintf(file, "worker:%p id:%04hx tid:%ld maxmsgsize:%lu qlen:%lu "
-	  "semid:%x oid=%04hx owid=%04hx output=%p func:%p(", this,
+	  "semid:%x oid=%04hx owid=%04hx oqid=%hd output=%p func:%p(", this,
 	  worker_getId(this),
 	  worker_getTid(this),
 	  worker_getMaxmsgsize(this),
@@ -95,6 +101,7 @@ worker_dump(worker_t this, FILE *file)
 	  worker_getSemid(this),
 	  worker_getOid(this),
 	  worker_getOwid(this),
+	  worker_getOqid(this),
 	  worker_getOutput(this),
 	  worker_getFunc(this));
   
@@ -149,7 +156,7 @@ worker_putBackQueueEntry(worker_t this, union ssbench_msghdr *h,
 static void
 worker_init(worker_t this, workerid_t id, const char *path,
 	    ssbench_func_t func, qid_t numqs,
-	    outputid_t oid, workerid_t owid, cpu_set_t cpumask)
+	    outputid_t oid, workerid_t owid, qid_t oqid, cpu_set_t cpumask)
 {
   worker_setId(this, id);
   worker_setTid(this, -1);
@@ -159,6 +166,7 @@ worker_init(worker_t this, workerid_t id, const char *path,
   worker_setSemid(this, -1);
   worker_setOid(this, oid);
   worker_setOwid(this, owid);
+  worker_setOqid(this, oqid);
   worker_setNumqs(this, numqs);
 
   ASSERT(numqs <= QID_MAX);
@@ -184,7 +192,7 @@ worker_init(worker_t this, workerid_t id, const char *path,
 worker_t
 worker_new(workerid_t id, const char *path, ssbench_func_t func,
 	   queue_desc_t qds, qid_t qdcount, outputid_t oid, workerid_t owid,
-	   cpu_set_t cpumask) {
+	   qid_t oqid, cpu_set_t cpumask) {
   worker_t this;
   queue_t *queues = NULL;
   qid_t    numqs  = 0;
@@ -216,7 +224,7 @@ worker_new(workerid_t id, const char *path, ssbench_func_t func,
   }
   ASSERT(numqs == qi);
   
-  worker_init(this, id, path, func, numqs, oid, owid, cpumask);
+  worker_init(this, id, path, func, numqs, oid, owid, oqid, cpumask);
   return this;
 }
 
@@ -232,6 +240,7 @@ worker_thread_loop(void * arg)
   ssbench_func_t    func       = worker_getFunc(this);
   output_t          output     = worker_getOutput(this);
   outputid_t        owid       = worker_getOwid(this);
+  qid_t             oqid       = worker_getOqid(this);
   queue_t          *queues     = worker_getQueues(this);
   qid_t             numqs      = worker_getNumqs(this);
   queue_scanstate_t qscanstate = Args.queue_scanstate_init();
@@ -298,6 +307,7 @@ worker_thread_loop(void * arg)
 	assert(olen > sizeof(union ssbench_msghdr));
 	omh = (union ssbench_msghdr *)(oqe->data);
 	omh->fields.wq.workerid = owid;
+	omh->fields.wq.qidx     = oqid;
 	omh->fields.datalen     = 0;
 	odata = &(oqe->data[sizeof(union ssbench_msghdr)]);
 	oqe->len = sizeof(union ssbench_msghdr);

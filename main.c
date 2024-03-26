@@ -352,6 +352,7 @@ addWorker(char **argv, int argc, char *optarg)
 
   outputid_t oid;
   workerid_t owid;
+  qid_t      oqid;
   cpu_set_t cpumask;
   CPU_ZERO(&cpumask);
   tmpstr = strtok_r(NULL, ",", &sptr);
@@ -366,6 +367,16 @@ addWorker(char **argv, int argc, char *optarg)
     owid = strtol(tmpstr, &endptr, 0);
     if (endptr == tmpstr || errno != 0) owid = ID_NULL;
 
+    tmpstr = strtok_r(NULL, ",", &sptr);
+    if (tmpstr == NULL) return false;
+    errno = 0;   // as per man page notes for strtod or strtol
+    oqid = strtol(tmpstr, &endptr, 0);
+    if (endptr == tmpstr || errno != 0) oqid = ID_NULL;
+    if (!QID_ISVALID(oqid)) {
+      EPRINT("ERROR: bad output qid %hd\n", oqid);
+      return false;
+    }
+    
     if (*sptr != '\0') {
       if (!parseCPUSet(sptr, &cpumask)) {
 	fprintf(stderr, "ERROR: invalid cpu set specifiation: %s\n", sptr);
@@ -379,6 +390,7 @@ addWorker(char **argv, int argc, char *optarg)
     // if no cpu mask specified then set mask to all cpus
     setAllcpus(Args.totalcpus, &cpumask);
     oid  = ID_NULL;
+    oqid = ID_NULL;
     owid = ID_NULL; 
   }
   VLPRINT(2, "id:%04x,path:%s,func:%p,oid:%04x,owid:%04x,queues:",
@@ -389,7 +401,7 @@ addWorker(char **argv, int argc, char *optarg)
     cpusetDump(stderr, &cpumask);
     VLPRINT(2, "%s", "\n");
   }
-  w = worker_new(id, path, func, qds, qdcount,oid, owid, cpumask);
+  w = worker_new(id, path, func, qds, qdcount,oid, owid, oqid, cpumask);
   HASH_ADD_INT(Args.workers.hashtable, id, w); 
   Args.workerCnt++;
   return true;
