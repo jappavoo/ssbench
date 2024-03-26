@@ -336,8 +336,8 @@ static void * input_thread_loop(void * arg)
       if ( activeConnection == &listenConnection ) {
 	struct sockaddr_storage addr; // in/out parameter
 	// addrlen must be initilized to size of addr in bytes.  It will be
-	// updated with length of the peer address (see man accept). If you don't
-	// do this you will not get a valid address sent back
+	// updated with length of the peer address (see man accept).
+	// If you don't do this you will not get a valid address sent back
  	socklen_t addrlen = sizeof(struct sockaddr_storage); // out 
 	int  connfd = net_accept(listenConnection.fd, &addr, &addrlen);
 	if (connfd == -1) {
@@ -349,7 +349,7 @@ static void * input_thread_loop(void * arg)
 	net_setnonblocking(connfd);
 	// create a new connection object for this connection
 	input_connection_t co = input_connection_new(addr, addrlen,
-							       connfd, this);
+						     connfd, this);
 	input_incNumconn(this);
 	input_connection_dump(this, co);
 

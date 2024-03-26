@@ -56,12 +56,6 @@ worker_setNumqs(worker_t this, qid_t n)
 }
 
 static inline void
-worker_setQlen(worker_t this, size_t qlen)
-{
-  this->qlen = qlen;
-}
-
-static inline void
 worker_setCpumask(worker_t this, cpu_set_t cpumask)
 {
   this->cpumask = cpumask;
@@ -92,12 +86,10 @@ worker_dump_queues(worker_t this, FILE *file)
 extern void
 worker_dump(worker_t this, FILE *file)
 {
-  fprintf(file, "worker:%p id:%04hx tid:%ld maxmsgsize:%lu qlen:%lu "
+  fprintf(file, "worker:%p id:%04hx tid:%ld "
 	  "semid:%x oid=%04hx owid=%04hx oqid=%hd output=%p func:%p(", this,
 	  worker_getId(this),
 	  worker_getTid(this),
-	  worker_getMaxmsgsize(this),
-	  worker_getQlen(this),
 	  worker_getSemid(this),
 	  worker_getOid(this),
 	  worker_getOwid(this),

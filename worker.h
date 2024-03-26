@@ -10,17 +10,15 @@ struct worker {
   output_t        output;
   UT_hash_handle  hh;
   cpu_set_t       cpumask;
-  size_t          maxmsgsize;
   pthread_t       tid;
   semid_t         semid;
-  int             qlen;
   hashid_t        id;
   outputid_t      oid;
   workerid_t      owid;
   qid_t           oqid;
   qid_t           numqs;
   // this must the last field 
-  struct queue *  queues[];
+  queue_t         queues[];
 };
 // public getters
 static inline workerid_t worker_getId(worker_t this) {
@@ -44,12 +42,7 @@ static inline ssbench_func_t worker_getFunc(worker_t this) {
 static inline pthread_t worker_getTid(worker_t this) {
   return this->tid;
 }
-static inline size_t worker_getMaxmsgsize(worker_t this) {
-  return this->maxmsgsize;
-}
-static inline size_t worker_getQlen(worker_t this) {
-  return this->qlen;
-}
+
 static inline const char * worker_getPath(worker_t this) {
   return this->path;
 }
