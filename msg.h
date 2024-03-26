@@ -7,7 +7,7 @@ union ssbench_msghdr {
   struct {
     union wqpair_t wq;
     uint32_t       datalen;
-  } fields;
+  };
 };
     
 #endif

@@ -5,19 +5,25 @@
 #include <string.h>
 #include <pthread.h>
 
+// #define VERBOSE
 size_t func_copy(uint8_t *data_in, size_t n_in,
 		 uint8_t *data_out, size_t n_out,
 		 void *ssbench_ctxt)
 {
-  pthread_t tid =  pthread_self();
+
   if (data_in != NULL) {
     assert(data_out != NULL);
     assert(n_out >= n_in);
   }
+#ifdef VERBOSE
+  pthread_t tid =  pthread_self();
   fprintf(stderr, "%ld, copy %lu bytes from %p(%lu) to %p(%lu)\n", tid,
 	  n_in, data_in, n_in, data_out, n_out);
+#endif
   memcpy(data_out, data_in, n_in);
+#ifdef VERBOSE
   fprintf(stderr, "%ld, done.\n", tid);
+#endif
   return n_in;
 }
 

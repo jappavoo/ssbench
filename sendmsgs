@@ -5,6 +5,7 @@ port=${port:-42421}
 while read w q data
 do
     len=${#data}
+    ((len++))
     ./msghdr $w $q $len
-    echo -n $data
+    echo $data
 done

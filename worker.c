@@ -79,6 +79,7 @@ worker_dump_queues(worker_t this, FILE *file)
   qid_t n = worker_getNumqs(this);
 
   for (qid_t i=0; i<n; i++) {
+    fprintf(file, "queue[%d]:\n", i);
     queue_dump(worker_getQueue(this,i),stderr);
   }
 }
@@ -87,10 +88,11 @@ extern void
 worker_dump(worker_t this, FILE *file)
 {
   fprintf(file, "worker:%p id:%04hx tid:%ld "
-	  "semid:%x oid=%04hx owid=%04hx oqid=%hd output=%p func:%p(", this,
+	  "semid:%x numqs:%hd oid=%04hx owid=%04hx oqid=%hd output=%p func:%p(", this,
 	  worker_getId(this),
 	  worker_getTid(this),
 	  worker_getSemid(this),
+	  worker_getNumqs(this),
 	  worker_getOid(this),
 	  worker_getOwid(this),
 	  worker_getOqid(this),
@@ -104,15 +106,15 @@ worker_dump(worker_t this, FILE *file)
     fprintf(file, "%s) cpumask:", path);
   }
   cpu_set_t mask=worker_getCpumask(this);
-  cpusetDump(stderr, &mask);
-  worker_dump_queues(this, stderr); 
+  cpusetDump(file, &mask);
+  worker_dump_queues(this, file); 
 }
 
 extern QueueEntryFindRC_t
 worker_getQueueEntry(worker_t this, union ssbench_msghdr *h, queue_entry_t *qe)
 {
-  qid_t   qidx = h->fields.wq.qidx;
-  size_t  len  = h->fields.datalen;
+  qid_t   qidx = h->wq.qidx;
+  size_t  len  = h->datalen;
   queue_t q;
 
   if (qidx < QID_MIN || qidx >= worker_getNumqs(this)) {
@@ -127,7 +129,7 @@ worker_putBackQueueEntry(worker_t this, union ssbench_msghdr *h,
 			 queue_entry_t *qe)
 {
   qid_t   numqs = worker_getNumqs(this);
-  qid_t   qidx  = h->fields.wq.qidx;
+  qid_t   qidx  = h->wq.qidx;
   semid_t semid = worker_getSemid(this);
   queue_t q;
 
@@ -231,7 +233,8 @@ worker_thread_loop(void * arg)
   const char       *path       = worker_getPath(this);
   ssbench_func_t    func       = worker_getFunc(this);
   output_t          output     = worker_getOutput(this);
-  outputid_t        owid       = worker_getOwid(this);
+  outputid_t        oid        = ID_NULL;
+  workerid_t        owid       = worker_getOwid(this);
   qid_t             oqid       = worker_getOqid(this);
   queue_t          *queues     = worker_getQueues(this);
   qid_t             numqs      = worker_getNumqs(this);
@@ -242,11 +245,12 @@ worker_thread_loop(void * arg)
   union ssbench_msghdr *omh;
   size_t                olen, flen;
   uint8_t              *odata;
-
   int rc;
+
+  if (output != NULL) oid = output_getId(output);
   
   worker_setTid(this, tid);
-  snprintf(name,nsize,"fs%08x%.*s",id,nsize-10,path);
+  snprintf(name,nsize,"w%04x%.*s",id,nsize-5,path);
   pthread_setname_np(tid, name);
 
   int semid = semget(IPC_PRIVATE, 1, S_IRUSR|S_IWUSR);  
@@ -260,15 +264,15 @@ worker_thread_loop(void * arg)
   rc = semctl(semid, 0, SETVAL, (int)0);
   ASSERT(rc==0);
 
-  if (verbose(1)) {
+  if (verbose(2)) {
     worker_dump(this,stderr);
     cpu_set_t cpumask;
     rc = pthread_getaffinity_np(tid, sizeof(cpumask), &cpumask);
     ASSERT(rc==0);
-    WVLP(1,"%s", "cpuaffinity:");
+    WVLP(2,"%s", "cpuaffinity:");
     cpusetDump(stderr, &cpumask);
   }
-  WVLP(1,"%s", "started\n");
+  WVLP(2,"%s", "started\n");
   pthread_barrier_wait(&(Args.workers.barrier));
 
   for (;;) {
@@ -298,9 +302,9 @@ worker_thread_loop(void * arg)
 	     oqe, oqe->data, oqe->len, olen);
 	assert(olen > sizeof(union ssbench_msghdr));
 	omh = (union ssbench_msghdr *)(oqe->data);
-	omh->fields.wq.workerid = owid;
-	omh->fields.wq.qidx     = oqid;
-	omh->fields.datalen     = 0;
+	omh->wq.workerid = owid;
+	omh->wq.qidx     = oqid;
+	omh->datalen     = 0;
 	odata = &(oqe->data[sizeof(union ssbench_msghdr)]);
 	oqe->len = sizeof(union ssbench_msghdr);
 	olen -= sizeof(union ssbench_msghdr);
@@ -310,11 +314,21 @@ worker_thread_loop(void * arg)
       olen = 0;
     }    
     // invoke the function on the input data and pass output buffer
-    flen = func(iqe->data, iqe->len, odata, olen, this);
+    if (verbose(1)) fprintf(stderr, "\t%hd,%hd:func(%p, %lu, %p, %lu, %p)\n",
+			    id, qidx, iqe->data, iqe->len, odata, olen, this);
+    if (func) {
+      flen = func(iqe->data, iqe->len, odata, olen, this);
+    } else {
+      flen = 0;
+      WVLP(1, "func:%p skipping\n", func);
+    }
     // function done so we can put entry back on empty list
     if (output) {
-      omh->fields.datalen = flen;
+      omh->datalen = flen;
       oqe->len += flen;
+      if (verbose(1)) fprintf(stderr, "<- %hd,%hd,%hd:oqe.len:%lu oqe.data:%p\n",
+			      oid, omh->wq.workerid, omh->wq.qidx,
+			      oqe->len, oqe->data);
       output_putBackQueueEntry(output, &oqe);
     }
     queue_putBackEmptyEntry(iq, iqe);
@@ -359,7 +373,7 @@ worker_destroy(worker_t this)
   qid_t    numqs  = worker_getNumqs(this);
   queue_t *queues = worker_getQueues(this);
   
-  WVLP(1, "%s", "called\n");
+  WVLP(2, "%s", "called\n");
   
   if (semid!=-1) {
     int rc = semctl(semid, 0, IPC_RMID);

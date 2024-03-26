@@ -80,6 +80,7 @@ dumpWorkers()
 static void
 dumpArgs()
 {
+  fprintf(stderr, "-------------- Args:START-------------\n");
   fprintf(stderr, "Args.pid=%d Args.totalcpus=%u, Args.availcpus=%u\n"
 	  "Args.inputCnt=%d Args.outputCnt=%d Args.workerCnt=%d\n"
 	  "Args.inputs.ht=%p, Args.outputs.ht=%p Args.workers.ht=%p\n"
@@ -94,9 +95,13 @@ dumpArgs()
 	  Args.workers.hashtable,
 	  Args.queue_scanstate_init, Args.queue_scanfull,
 	  Args.verbose);
+  fprintf(stderr, "============ inputs ==========\n");
   dumpInputs();
+  fprintf(stderr, "=========== outputs ==========\n");
   dumpOutputs();
+  fprintf(stderr, "=========== workers ==========\n");
   dumpWorkers();
+  fprintf(stderr, "-------------- Args:END --------------\n");
 }
 
 static bool
@@ -524,7 +529,7 @@ int main(int argc, char **argv)
   
   if (!processArgs(argc,argv)) return -1;
 
-  assert(Args.inputCnt == HASH_COUNT(Args.inputs.hashtable));
+  assert(Args.inputCnt  == HASH_COUNT(Args.inputs.hashtable));
   assert(Args.workerCnt == HASH_COUNT(Args.workers.hashtable));
   assert(Args.outputCnt == HASH_COUNT(Args.outputs.hashtable));
 

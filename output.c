@@ -99,7 +99,7 @@ static void * output_thread_loop(void * arg)
   queue_entry_t qe;
 
   output_setTid(this, tid);
-  snprintf(name,nsize,"os%08x%06d",id,port);
+  snprintf(name,nsize,"o%08x%06d",id,port);
   pthread_setname_np(tid, name);
 
   int semid = semget(IPC_PRIVATE, 1, S_IRUSR|S_IWUSR);  
@@ -112,14 +112,14 @@ static void * output_thread_loop(void * arg)
   /* initlize the semaphore (#0 in the set) count to 0 Simulate a mutex */
   assert(semctl(semid, 0, SETVAL, (int)0)==0);
 
-  if (verbose(1)) {
+  if (verbose(2)) {
     output_dump(this,stderr);
     cpu_set_t cpumask;
     assert(pthread_getaffinity_np(tid, sizeof(cpumask), &cpumask)==0);
-    OVLP(1,"%s", "cpuaffinity:");
+    OVLP(2,"%s", "cpuaffinity:");
     cpusetDump(stderr, &cpumask);
   }
-  OVLP(1,"%s", "started\n");
+  OVLP(2,"%s", "started\n");
   pthread_barrier_wait(&(Args.outputs.barrier));
   
   for (;;) {
@@ -133,6 +133,7 @@ static void * output_thread_loop(void * arg)
     OVLP(2, "%s", "AWAKE\n");
     queue_getFullEntry(q, &qe);
     assert(qe);
+    if (verbose(1)) fprintf(stderr, "< %hd,%lu,%p\n", id, qe->len, qe->data);
     net_writen(sendfd, qe->data, qe->len); 
     queue_putBackEmptyEntry(q, qe);
   }
@@ -171,7 +172,7 @@ extern void
 output_destroy(output_t this)
 {
   int semid = output_getSemid(this);
-  OVLP(1,"%s", "called\n");
+  OVLP(2,"%s", "called\n");
 
   if (semid!=-1) {
     int rc = semctl(semid, 0, IPC_RMID);

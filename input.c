@@ -85,8 +85,8 @@ static void
 msgbuf_dump(input_msgbuffer_t mb)
 {
   fprintf(stderr, "%p:hdr.raw:%lx (workerid:%x datalen:%d) n:%d fsrv:%p qe:%p\n",
-	  mb, mb->hdr.raw[0], mb->hdr.fields.wq.workerid,
-	  mb->hdr.fields.datalen,
+	  mb, mb->hdr.raw[0], mb->hdr.wq.workerid,
+	  mb->hdr.datalen,
 	  mb->n, mb->worker, mb->qe);
 }
 
@@ -113,7 +113,7 @@ input_connection_dump(input_t this, struct input_connection *c)
   int msgcnt = c->msgcnt;
   void *input = c->input;
     
-  if (verbose(1)) {
+  if (verbose(2)) {
     fprintf(stderr,"%p:input:%p fd:%d msgcnt:%d sa_fam:%d addrlen:%d addr:",
 	    c,input, connfd, msgcnt, addr->sa_family, addrlen);
     if (addr->sa_family == AF_INET) {
@@ -142,7 +142,7 @@ input_cleanupConnection(input_t this, input_connection_t co)
 {
   struct epoll_event dummyev;
   int epollfd = input_getEpollfd(this);
-  IVLP(1,"co:%p \n\t", co);
+  IVLP(2,"co:%p \n\t", co);
   input_connection_dump(this, co);
   if (co->mbuf.n != 0) NYI;  // connection was lost in the middle of a message
   // for backwards compatiblity we use dummy versus NULL see bugs section
@@ -161,7 +161,7 @@ input_findWorkerAndQueueEntry(input_t this, union ssbench_msghdr *h,
 {
   worker_t tmpw;
   ASSERT(h);
-  workerid_t wid = h->fields.wq.workerid;
+  workerid_t wid = h->wq.workerid;
   int intwid = wid;
   
   HASH_FIND_INT(Args.workers.hashtable, &intwid, tmpw);
@@ -197,7 +197,7 @@ input_serveConnection(input_t this, input_connection_t co)
   int n                        = comb->n; 
   queue_entry_t qe;
   
-  IVLP(1,"co:%p mb.n=%d\n",co,comb->n);
+  IVLP(2,"co:%p mb.n=%d\n",co,comb->n);
   if ( n < msghdrlen) {
     ASSERT(n<=msghdrlen);
     n += net_nonblocking_readn(cofd, &comb->hdr.buf[n], msghdrlen-n);
@@ -205,24 +205,25 @@ input_serveConnection(input_t this, input_connection_t co)
     if (n<msghdrlen) return; // have not received full msg hdr yet
     // We have a whole message header. Switch over to buffering
     // the data of the message to the correct operator queue
-    IVLP(1,"msghdr: wid:%x(%02hhx %02hhx %02hhx %02hhx) "
+    IVLP(2,"msghdr: wid:%hd qidx:%hd ((%02hhx %02hhx %02hhx %02hhx) "
 	 "datalen:%u (%02hhx %02hhx %02hhx %02hhx)\n",
-	 comb->hdr.fields.wq.workerid, comb->hdr.buf[0],
+	 comb->hdr.wq.workerid,comb->hdr.wq.qidx, comb->hdr.buf[0],
 	 comb->hdr.buf[1], comb->hdr.buf[2], comb->hdr.buf[3],
-	 comb->hdr.fields.datalen, comb->hdr.buf[4],
+	 comb->hdr.datalen, comb->hdr.buf[4],
 	 comb->hdr.buf[5], comb->hdr.buf[6], comb->hdr.buf[7]);
     QueueEntryFindRC_t  qerc;
     worker_t w;
     qerc=input_findWorkerAndQueueEntry(this,  &comb->hdr, &w, &qe);
     if (qerc == Q_NONE) {
-      VLPRINT(2, "input:%p Q_NONE could not find an worker?\n", this); 
+      EPRINT("ERROR: input:%p Q_NONE could not find an worker?\n", this); 
       comb->qe = NULL;
     } else if (qerc == Q_MSG2BIG) {
-      EPRINT("input:%p worker:%p QMSG2BIG\n", this, w);
+      EPRINT("ERROR: input:%p worker:%p QMSG2BIG\n", this, w);
       comb->qe = NULL;
     } else if (qerc == Q_FULL) {
       // add code to record and signal back pressure
-      EPRINT("input:%p w:%p wid:%04hx Q_FULL no space to place message drain\n",
+      EPRINT("BACK PRESSURE: input:%p w:%p wid:%04hx Q_FULL no space to"
+	     " place message drain\n",
 	     this, w, worker_getId(w));
       comb->qe = NULL;
     } else {
@@ -234,7 +235,7 @@ input_serveConnection(input_t this, input_connection_t co)
   qe = comb->qe;
   ASSERT(n>=msghdrlen);
   n -= msghdrlen;      // n = amount of message data read so far
-  const int len = comb->hdr.fields.datalen;
+  const int len = comb->hdr.datalen;
   ASSERT(n<=len);
   if (qe == NULL) {
     char tmpbuf[len-n];
@@ -261,9 +262,10 @@ input_serveConnection(input_t this, input_connection_t co)
     ASSERT(worker);
     qe->len = comb->n - msghdrlen;
     ASSERT(qe->len == len);
+    if (verbose(1)) fprintf(stderr, "-> %hd,%hd: qe.len:%lu qe.data:%p\n",
+			    comb->hdr.wq.workerid, comb->hdr.wq.qidx, qe->len,
+			    qe->data);
     if (verbose(2)) {
-      VLPRINT(2, "Got msg for worker:%p id:%04hx\n",
-	      worker, worker_getId(worker));
       hexdump(stderr, qe->data, qe->len);
     }
     worker_putBackQueueEntry(worker, &comb->hdr, &qe);
@@ -297,19 +299,19 @@ static void * input_thread_loop(void * arg)
   struct epoll_event ev, events[MAX_EVENTS];
   
   input_setTid(this, tid);
-  snprintf(name,input_sizeofName(this),"is%d",
+  snprintf(name,input_sizeofName(this),"i%d",
 	   input_getPort(this));
   pthread_setname_np(tid, name);
   
-  if (verbose(1)) {
+  if (verbose(2)) {
     cpu_set_t cpumask;
     int rc = pthread_getaffinity_np(tid, sizeof(cpumask), &cpumask);
     ASSERT(rc==0);
-    IVLP(1,"%s", "cpuaffinity:");
+    IVLP(2,"%s", "cpuaffinity:");
     cpusetDump(stderr, &cpumask);
   }
 
-  IVLP(1,"listenConnection:%p:listenFd:%d:epollfd:%d\n",
+  IVLP(2,"listenConnection:%p:listenFd:%d:epollfd:%d\n",
        &listenConnection,listenConnection.fd, epollfd);
 
   ev.events = EPOLLIN;
@@ -332,7 +334,7 @@ static void * input_thread_loop(void * arg)
     
     for (int n = 0; n < nfds; ++n) {
       void * activeConnection = events[n].data.ptr;
-      IVLP(1,"activeConnection:%p\n", activeConnection);
+      IVLP(2,"activeConnection:%p\n", activeConnection);
       if ( activeConnection == &listenConnection ) {
 	struct sockaddr_storage addr; // in/out parameter
 	// addrlen must be initilized to size of addr in bytes.  It will be
@@ -344,13 +346,13 @@ static void * input_thread_loop(void * arg)
 	  perror("accept");
 	  exit(EXIT_FAILURE);
 	}
-        IVLP(1,"new connection:%d\n\t", connfd);
 	// epoll man page recommends non-blocking io for edgetriggered use 
 	net_setnonblocking(connfd);
 	// create a new connection object for this connection
 	input_connection_t co = input_connection_new(addr, addrlen,
 						     connfd, this);
 	input_incNumconn(this);
+	IVLP(1,"connection established: co:%p fd:%d\n", co, co->fd);
 	input_connection_dump(this, co);
 
 	// setup event structure
@@ -364,17 +366,17 @@ static void * input_thread_loop(void * arg)
       } else {
 	input_connection_t co = activeConnection;
 	uint32_t evnts = events[n].events;
-	IVLP(1,"activity on connection:%p: events0x%x fd:%d\n",
+	IVLP(2,"activity on connection:%p: events0x%x fd:%d\n",
 	     co, evnts, co->fd);
 	// process each of the events that have occurred on this connection
 	if (evnts & EPOLLIN) {
-	  IVLP(1,"co:%p fd:%d got EPOLLIN(%x) evnts:%x\n",
+	  IVLP(2,"co:%p fd:%d got EPOLLIN(%x) evnts:%x\n",
 	       co, co->fd, EPOLLIN, evnts);
 	  input_serveConnection(this, co);
 	  evnts = evnts & ~EPOLLIN;
 	}
 	if (evnts & EPOLLHUP) {
-	  IVLP(1,"co:%p fd:%d got EPOLLHUP(%x) evnts:%x\n",
+	  IVLP(2,"co:%p fd:%d got EPOLLHUP(%x) evnts:%x\n",
 	       co, co->fd, EPOLLHUP, evnts);
 	  evnts = evnts & ~EPOLLHUP;
 	  NYI;
@@ -386,13 +388,13 @@ static void * input_thread_loop(void * arg)
 	  input_cleanupConnection(this, co);
 	}
 	if (evnts & EPOLLERR) {
-	  IVLP(1,"co:%p fd:%d got EPOLLERR(%x) evnts:%x",
+	  IVLP(2,"co:%p fd:%d got EPOLLERR(%x) evnts:%x",
 	       co, co->fd, EPOLLERR, evnts);
 	  evnts = evnts & ~EPOLLERR;
 	  NYI;
 	}
 	if (evnts != 0) {
-	  IVLP(1,"co:%p fd:%d unknown events evnts:%x",
+	  IVLP(2,"co:%p fd:%d unknown events evnts:%x",
 	       co, co->fd, evnts);
 	  ASSERT(evnts==0);
 	}
@@ -491,5 +493,5 @@ input_dump(input_t this, FILE *file)
 extern void
 input_destroy(input_t this)
 {
-  IVLP(1,"%s", "called\n");
+  IVLP(2,"%s", "called\n");
 }

@@ -1,0 +1,17 @@
+#!/bin/bash
+
+workers=${1-"0,0 1,0 2,0 3,0"}
+loops=${2-1}
+sleep=${3:-1.0}
+maxstrlen=100
+
+for ((i=0;i<$loops;i++)); do
+    for wq in ${workers}; do  
+	w=${wq%%,*};q=${wq##*,}
+	len=$((RANDOM % maxstrlen))
+	str=$(pwgen $len 1)
+	echo $w $q "$str"
+	sleep $sleep
+    done
+done
+
