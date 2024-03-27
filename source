@@ -1,1 +1,10 @@
-./load "0,0 1,0 2,0 3,0" 10  | ./sendmsgs | ./con 42421
+SOURCES=${1:-16}
+WORKERS=${2:-4}
+HOST=${3:-localhost}
+PORT=${4:-42421}
+COUNT=${5:-10}
+DELAY=${6:-0.01}
+
+wqpairs=$(eval echo {0..$((WORKERS-1))},{0..$((SOURCES-1))})
+#echo $wqpairs
+./load "$wqpairs" ${COUNT} ${DELAY}  | ./sendmsgs | ./con ${PORT} ${HOST}

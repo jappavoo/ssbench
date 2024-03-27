@@ -1,1 +1,26 @@
-./ssbench -i 42421 -o 1,localhost:52521,4096,8 -w 0,./copy.so,[4:1024:2],1,0,0  -w 1,./copy.so,[4:1024:2],1,1,0  -w 2,./copy.so,[4:1024:2],1,2,0 -w 3,./copy.so,[4:1024:2],1,3,0
+SOURCES=${1:-16}
+WORKERS=${2:-4}
+PORT=${3:-42421}
+MAXMSGSIZE=${4:-1024}
+QLEN=${5:-16}
+
+OUTHOSTPORT=${6:-localhost:52521}
+OUTMAXMSGSIZE=${7:-1024}
+OUTQLEN=${8:-16}
+
+if [[ -z $OUTHOSTPORT ]]; then
+    OUT=""
+    OWQ=""
+    FUNC="./stdout.so"
+else
+    OUT="-o 1,${OUTHOSTPORT},${OUTMAXMSGSIZE},${OUTQLEN}"
+    OWQ=",1,0,0"
+    FUNC="./copy.so"
+fi
+
+WORKERS=$(for ((w=0; w<$WORKERS; w++)); do
+    echo "-w $w,$FUNC,[${SOURCES}:${MAXMSGSIZE}:${QLEN}]${OWQ}"
+done)
+
+./ssbench -i $PORT $OUT $WORKERS
+#./ssbench -i 42421 $OUT -w 0,./copy.so,[16:1024:16],1,0,0  -w 1,./copy.so,[16:1024:16],1,1,0  -w 2,./copy.so,[4:1024:2],1,2,0 -w 3,./copy.so,[4:1024:2],1,3,0
