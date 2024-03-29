@@ -8,5 +8,5 @@ FUNC="./stdout.so"
 WORKERS=$(for ((w=0; w<$NUM; w++)); do
 	      echo "-w ${w},${FUNC},[${NQS}:${MAXMSGSIZE}:${QLEN}]"
 	  done)
-./ssbench -i ${PORT} ${WORKERS}
+./ssbench ${VERBOSE} -i ${PORT} ${WORKERS}
 #./ssbench -i 52521  -w 0,./stdout.so,[1:1024:4]  -w 1,./stdout.so,[1:1024:4]  -w 2,./stdout.so,[1:1024:4] -w 3,./stdout.so,[1:1024:4]

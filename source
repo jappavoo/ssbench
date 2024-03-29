@@ -3,8 +3,15 @@ WORKERS=${2:-4}
 HOST=${3:-localhost}
 PORT=${4:-42421}
 COUNT=${5:-10}
-DELAY=${6:-0.01}
+DELAY=${6:-0.1}
 
 wqpairs=$(eval echo {0..$((WORKERS-1))},{0..$((SOURCES-1))})
 #echo $wqpairs
-./load "$wqpairs" ${COUNT} ${DELAY}  | ./sendmsgs | ./con ${PORT} ${HOST}
+
+if [[ -n ${NOCON} ]]; then
+   ./load "$wqpairs" ${COUNT} ${DELAY} 	
+else
+  ./load "$wqpairs" ${COUNT} ${DELAY}  | ./sendmsgs | ./con ${PORT} ${HOST}
+fi
+
+

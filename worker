@@ -22,5 +22,5 @@ WORKERS=$(for ((w=0; w<$WORKERS; w++)); do
     echo "-w $w,$FUNC,[${SOURCES}:${MAXMSGSIZE}:${QLEN}]${OWQ}"
 done)
 
-./ssbench -i $PORT $OUT $WORKERS
+./ssbench ${VERBOSE} -i $PORT $OUT $WORKERS
 #./ssbench -i 42421 $OUT -w 0,./copy.so,[16:1024:16],1,0,0  -w 1,./copy.so,[16:1024:16],1,1,0  -w 2,./copy.so,[4:1024:2],1,2,0 -w 3,./copy.so,[4:1024:2],1,3,0
